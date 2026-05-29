@@ -26,7 +26,7 @@ interface StudyRecord {
   solutions: Solution[];
 }
 
-export default function RepositoryGrid() {
+export default function RepositoryGrid({ initialFilters }: { initialFilters?: { subject?: string; question_type?: string; tag?: string } } = {}) {
   const [records, setRecords] = useState<StudyRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -39,6 +39,9 @@ export default function RepositoryGrid() {
   // 查看详情弹窗控制
   const [activeRecord, setActiveRecord] = useState<StudyRecord | null>(null);
 
+  // ref used to hold desired question_type until types list loads
+  const desiredTypeRef = React.useRef<string | null>(null);
+
   // 联动管道：监听科目变更，实时更新题型选单字典
   useEffect(() => {
     fetch(`/api/question-types?subject=${encodeURIComponent(selectedSubject)}`)
@@ -46,15 +49,20 @@ export default function RepositoryGrid() {
       .then((data) => {
         if (data.success) {
           setDynamicTypes(data.types);
-          if (!data.types.includes(selectedType)) {
-            setSelectedType('');
+          // If there's a pending desired type (from initialFilters), apply it only when types are loaded
+          // otherwise keep current selection (do not auto-clear to preserve user intent)
+          if (desiredTypeRef.current) {
+            if (data.types.includes(desiredTypeRef.current)) {
+              setSelectedType(desiredTypeRef.current);
+            }
+            desiredTypeRef.current = null;
           }
         }
       })
       .catch((err) => console.error('读取联动筛选字典失败:', err));
   }, [selectedSubject]);
 
-  // 核心数据检索
+  // 核心数据检索 - only run when user clicks 查询
   const fetchRecords = async () => {
     setLoading(true);
     try {
@@ -75,9 +83,17 @@ export default function RepositoryGrid() {
     }
   };
 
+  // If initial filters arrive, apply them. For question_type we may need to wait until dynamicTypes are loaded.
   useEffect(() => {
-    fetchRecords();
-  }, [search, selectedSubject, selectedType]);
+    if (initialFilters && Object.keys(initialFilters).length > 0) {
+      if (initialFilters.subject) setSelectedSubject(initialFilters.subject);
+      if (initialFilters.question_type) {
+        // store desired type to apply when types list is available
+        desiredTypeRef.current = initialFilters.question_type;
+      }
+      if (initialFilters.tag) setSearch(initialFilters.tag);
+    }
+  }, [initialFilters]);
 
   const renderStars = (num: number) => {
     return Array.from({ length: 5 }).map((_, i) => (
@@ -118,6 +134,9 @@ export default function RepositoryGrid() {
               <option key={idx} value={t}>{t}</option>
             ))}
           </select>
+        </div>
+        <div className="w-full md:w-44 flex items-center justify-end">
+          <button onClick={() => fetchRecords()} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md active:scale-95">查询</button>
         </div>
       </div>
 

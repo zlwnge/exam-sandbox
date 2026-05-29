@@ -83,6 +83,11 @@ export async function GET(request: Request) {
       query += ` AND r.question_type = ?`;
       params.push(qType);
     }
+    const tag = searchParams.get('tag') || '';
+    if (tag) {
+      query += ` AND r.tags LIKE ?`;
+      params.push(`%${tag}%`);
+    }
 
     query += ` ORDER BY r.practice_date DESC, r.created_at DESC`;
     const rows = db.prepare(query).all(...params) as any[];

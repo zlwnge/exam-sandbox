@@ -5,7 +5,7 @@ import '@/app/globals.css';
 import GithubHeatmap from '@/components/GithubHeatmap';
 import RecordForm from '@/components/RecordForm';
 import RepositoryGrid from '@/components/RepositoryGrid';
-//import KnowledgeDashboard from '@/components/KnowledgeDashboard';
+import StatsPanel from '@/components/StatsPanel';
 import { LayoutDashboard, Database, AlertOctagon, Terminal, FilePlus2 } from 'lucide-react';
 
 export default function MainAppShell() {
@@ -13,6 +13,7 @@ export default function MainAppShell() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   // 🔥 控制录入舱弹窗的核心状态
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
+  const [presetFilters, setPresetFilters] = useState<any>(null);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-50/60">
@@ -74,6 +75,8 @@ export default function MainAppShell() {
 
               {/* GitHub 时空贡献度热力图保持常驻 */}
               <GithubHeatmap key={`hm-${refreshTrigger}`} />
+              {/* 实时统计面板：科目 / 细分题型 / 知识点 */}
+              <StatsPanel onNavigate={(f) => { setPresetFilters(f); setActiveTab('repository'); setRefreshTrigger(prev => prev + 1); }} />
               
               {/* 简易说明引导 */}
               <div className="bg-white p-5 rounded-xl border text-xs text-slate-400 leading-relaxed">
@@ -81,7 +84,7 @@ export default function MainAppShell() {
               </div>
             </div>
           )}
-          {activeTab === 'repository' && <RepositoryGrid key={`rp-${refreshTrigger}`} />}
+          {activeTab === 'repository' && <RepositoryGrid key={`rp-${refreshTrigger}-${presetFilters ? JSON.stringify(presetFilters) : 'no'}`} initialFilters={presetFilters} />}
           {activeTab === 'analytics' && <GithubHeatmap key={`al-${refreshTrigger}`} />}
         </div>
       </main>
