@@ -26,7 +26,7 @@ interface StudyRecord {
   solutions: Solution[];
 }
 
-export default function RepositoryGrid({ initialFilters }: { initialFilters?: { subject?: string; question_type?: string; tag?: string } } = {}) {
+export default function RepositoryGrid({ initialFilters }: { initialFilters?: { subject?: string; question_type?: string; tag?: string; autoRun?: boolean } } = {}) {
   const [records, setRecords] = useState<StudyRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -92,6 +92,40 @@ export default function RepositoryGrid({ initialFilters }: { initialFilters?: { 
         desiredTypeRef.current = initialFilters.question_type;
       }
       if (initialFilters.tag) setSearch(initialFilters.tag);
+    }
+  }, [initialFilters]);
+
+  // auto-run when navigation requested autoRun and types are ready
+  const [autoRunDone, setAutoRunDone] = useState(false);
+  useEffect(() => {
+    if (initialFilters && initialFilters.autoRun && !autoRunDone) {
+      // if a question_type was requested, wait until dynamicTypes includes it (or types loaded)
+      const requestedType = initialFilters.question_type;
+      if (requestedType) {
+        if (dynamicTypes.length === 0) return; // wait for types to load
+        // apply even if not found (fallback)
+        fetchRecords();
+        setAutoRunDone(true);
+      } else {
+        // no specific type, run immediately
+        fetchRecords();
+        setAutoRunDone(true);
+      }
+    }
+  }, [dynamicTypes, initialFilters, autoRunDone]);
+
+  // When navigated to repository without presets (来自其他页面)，展示全量：
+  // 清空搜索框与筛选，自动查询全部记录。
+  useEffect(() => {
+    if (initialFilters == null) {
+      // reset UI controls
+      setSearch('');
+      setSelectedSubject('');
+      setSelectedType('');
+      // reset autoRun marker so future navigations still work
+      setAutoRunDone(false);
+      // fetch all records (no filters)
+      fetchRecords();
     }
   }, [initialFilters]);
 

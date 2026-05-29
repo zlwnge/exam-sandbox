@@ -7,7 +7,7 @@ type KnowledgeRow = { tag: string; cnt: number };
 type TypeRow = { question_type: string; cnt: number; knowledge: KnowledgeRow[] };
 type SubjectRow = { subject: string; cnt: number; types: TypeRow[] };
 
-export default function StatsPanel({ onNavigate }: { onNavigate: (f: { subject?: string; question_type?: string; tag?: string }) => void }) {
+export default function StatsPanel({ onNavigate }: { onNavigate: (f: { subject?: string; question_type?: string; tag?: string; autoRun?: boolean }) => void }) {
   const [loading, setLoading] = useState(true);
   const [hierarchy, setHierarchy] = useState<SubjectRow[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<string>('');
@@ -32,9 +32,9 @@ export default function StatsPanel({ onNavigate }: { onNavigate: (f: { subject?:
     return () => { mounted = false };
   }, []);
 
-  const handleNavigate = (payload: { subject?: string; question_type?: string; tag?: string }) => {
+  const handleNavigate = (payload: { subject?: string; question_type?: string; tag?: string; autoRun?: boolean }) => {
     try { localStorage.setItem('presetFilters', JSON.stringify(payload)); } catch (e) {}
-    onNavigate(payload);
+    onNavigate({ ...payload, autoRun: true });
   };
 
   const subjectsArea = (

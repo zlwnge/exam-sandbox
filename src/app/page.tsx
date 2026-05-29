@@ -31,7 +31,7 @@ export default function MainAppShell() {
             <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/10' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <LayoutDashboard className="w-4 h-4" /> 仪表盘数据大盘
             </button>
-            <button onClick={() => setActiveTab('repository')} className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${activeTab === 'repository' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/10' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
+            <button onClick={() => { setPresetFilters(null); setActiveTab('repository'); }} className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${activeTab === 'repository' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/10' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
               <Database className="w-4 h-4" /> 档案解构重构仓库
             </button>
             <button onClick={() => setActiveTab('analytics')} className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${activeTab === 'analytics' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/10' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}>
