@@ -26,7 +26,8 @@ export default function RecordForm({ onRecordAdded, onClose }: RecordFormProps) 
   const [practiceDate, setPracticeDate] = useState('2026-05-28');
   const [reviewNotes, setReviewNotes] = useState('');
   const [reviewImage, setReviewImage] = useState<string | null>(null);
-  const [solutions, setSolutions] = useState([{ channel_name: '粉笔', solution_text: '', solution_image: null as string | null }]);
+   const [solutions, setSolutions] = useState([{ channel_name: '粉笔', solution_text: '', solution_image: null as string | null }]); 
+   const [errors, setErrors] = useState<{ [key: string]: any }>({});
 
   // 监听科目变更：实时联动拉取该科目名下的历史常用题型词典
   useEffect(() => {
@@ -108,6 +109,47 @@ export default function RecordForm({ onRecordAdded, onClose }: RecordFormProps) 
       review_image: reviewImage,
       solutions
     };
+    const validationErrors: { [key: string]: any } = {};
+    if (!source || !String(source).trim()) {
+      validationErrors.source = '请填写题目来源';
+    }
+    if (!subject || !String(subject).trim()) {
+      validationErrors.subject = '请选择所属科目';
+    }
+    if (!questionType || !String(questionType).trim()) {
+      validationErrors.questionType = '请填写细分题型';
+    }
+
+    if (!contentText || !String(contentText).trim()) {
+      if (!contentImage) validationErrors.content = '请提供题干文本或粘贴题干图片';
+    }
+
+    if (!userAnswer || !String(userAnswer).trim()) {
+      if (!userAnswerImage) validationErrors.userAnswer = '请提供作答文本或粘贴作答图片';
+    }
+
+    // 复盘笔记：文本为空时图片也可视为已填写
+    if (!reviewNotes || !String(reviewNotes).trim()) {
+      if (!reviewImage) validationErrors.review = '请提供复盘笔记文本或粘贴复盘图片';
+    }
+
+    // validate solutions: each must have channel_name and (text or image)
+    const solErrors: string[] = [];
+    solutions.forEach((s, idx) => {
+      const ch = (s.channel_name || '').toString().trim();
+      const txt = (s.solution_text || '').toString().trim();
+      const img = s.solution_image;
+      if (!ch) solErrors[idx] = '请填写渠道来源';
+      if (!txt && !img) solErrors[idx] = (solErrors[idx] ? solErrors[idx] + '，' : '') + '请填写参考答案或粘贴截图';
+    });
+    if (solErrors.length) validationErrors.solutions = solErrors;
+
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      // scroll to first error field? simple alert for now
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
 
     const res = await fetch('/api/records', {
       method: 'POST',
@@ -191,7 +233,8 @@ export default function RecordForm({ onRecordAdded, onClose }: RecordFormProps) 
               <textarea onPaste={(e) => handlePasteCapture(e, 'content')}
                         placeholder="请输入题目文本内容，支持长材料，也可直接粘贴屏幕截图文件..."
                         value={contentText} onChange={(e) => setContentText(e.target.value)} rows={4}
-                        className="w-full text-xs outline-none resize-none leading-relaxed text-slate-600" required />
+                        className="w-full text-xs outline-none resize-none leading-relaxed text-slate-600" />
+              {errors.content && <div className="text-red-500 text-xs mt-1">{errors.content}</div>}
               {contentImage && (
                 <div className="mt-2 relative inline-block border rounded-lg overflow-hidden bg-slate-50">
                   <img src={contentImage} alt="题干截图" className="max-h-24 object-contain" />
@@ -209,7 +252,8 @@ export default function RecordForm({ onRecordAdded, onClose }: RecordFormProps) 
             <textarea onPaste={(e) => handlePasteCapture(e, 'userAnswer')}
                       placeholder="输入你当时的作答选项或申论草稿推演大段文字，或直接粘贴截图..."
                       value={userAnswer} onChange={(e) => setUserAnswer(e.target.value)} rows={3}
-                      className="w-full text-xs bg-transparent outline-none resize-none leading-relaxed text-slate-600" required />
+                      className="w-full text-xs bg-transparent outline-none resize-none leading-relaxed text-slate-600" />
+            {errors.userAnswer && <div className="text-red-500 text-xs mt-1">{errors.userAnswer}</div>}
             {userAnswerImage && (
               <div className="mt-2 relative inline-block border rounded-lg overflow-hidden bg-slate-50">
                 <img src={userAnswerImage} alt="作答截图" className="max-h-24 object-contain" />
@@ -235,7 +279,8 @@ export default function RecordForm({ onRecordAdded, onClose }: RecordFormProps) 
                     <textarea onPaste={(e) => handlePasteCapture(e, 'solution', idx)}
                               placeholder="参考答案 或 核心解题思路，支持粘贴截图"
                               value={sol.solution_text} onChange={(e) => handleChannelChange(idx, 'solution_text', e.target.value)}
-                              className="w-full border-b border-slate-200 py-1.5 text-xs outline-none bg-transparent focus:border-blue-500 resize-none" rows={2} required />
+                              className="w-full border-b border-slate-200 py-1.5 text-xs outline-none bg-transparent focus:border-blue-500 resize-none" rows={2} />
+                    {errors.solutions && errors.solutions[idx] && <div className="text-red-500 text-xs mt-1">{errors.solutions[idx]}</div>}
                     {sol.solution_image && (
                       <div className="mt-2 relative inline-block border rounded-lg overflow-hidden bg-slate-50">
                         <img src={sol.solution_image} alt={`渠道${idx}截图`} className="max-h-24 object-contain" />
@@ -290,7 +335,8 @@ export default function RecordForm({ onRecordAdded, onClose }: RecordFormProps) 
               <textarea onPaste={(e) => handlePasteCapture(e, 'review')}
                         placeholder="记录解题思维导图、公式秒杀技巧、踩坑归纳或高级申论全句范文..."
                         value={reviewNotes} onChange={(e) => setReviewNotes(e.target.value)} rows={4}
-                        className="w-full text-xs bg-transparent outline-none resize-none leading-relaxed text-slate-600 focus:ring-0" required />
+                        className={`w-full text-xs bg-transparent outline-none resize-none leading-relaxed text-slate-600 focus:ring-0 ${errors.review ? 'border border-red-300 bg-red-50' : ''}`} />
+              {errors.review && <div className="text-red-500 text-xs mt-1">{errors.review}</div>}
               {reviewImage && (
                 <div className="mt-2 relative inline-block border border-amber-200 rounded-lg overflow-hidden bg-white">
                   <img src={reviewImage} alt="复盘动态思维导图" className="max-h-36 object-contain" />

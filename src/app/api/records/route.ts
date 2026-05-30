@@ -64,9 +64,14 @@ export async function POST(request: Request) {
       }
     }
 
-    // 健壮性防空御盾：确保核心元数据不为空
-    if (!source || !subject || !question_type || !content_text) {
-      return NextResponse.json({ success: false, error: '必填基础档案元数据不完整' }, { status: 400 });
+    // Normalize text fields to avoid NULL NOT NULL conflicts in DB
+    content_text = content_text || '';
+    user_answer = user_answer || '';
+    review_notes = review_notes || '';
+
+    // 健壮性防空：允许只提供图片而不提供文本（例如：只粘贴截图）
+    if (!source || !subject || !question_type || (!(content_text && String(content_text).trim()) && !content_image)) {
+      return NextResponse.json({ success: false, error: '必填基础档案元数据不完整：请提供题目文本或题目截图' }, { status: 400 });
     }
 
     const insertRecord = db.prepare(`
@@ -89,9 +94,13 @@ export async function POST(request: Request) {
       
       if (Array.isArray(data.solutions)) {
         for (const sol of data.solutions) {
-          if (sol.solution_text && String(sol.solution_text).trim()) { // 仅持久化有实际内容的机构解析行
+          const solText = (sol.solution_text || '').toString();
+          const solImage = sol.solution_image || null;
+          // Persist solution if it has text content or an image
+          if ((solText && solText.trim()) || solImage) {
             const solId = randomUUID();
-            insertSolution.run(solId, id, sol.channel_name || '未命名渠道', sol.solution_text, sol.solution_image || null);
+            const channel = (sol.channel_name && String(sol.channel_name).trim()) ? sol.channel_name : '未命名渠道';
+            insertSolution.run(solId, id, channel, solText, solImage);
           }
         }
       }
