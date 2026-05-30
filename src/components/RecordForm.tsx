@@ -20,12 +20,13 @@ export default function RecordForm({ onRecordAdded, onClose }: RecordFormProps) 
   const [contentText, setContentText] = useState('');
   const [contentImage, setContentImage] = useState<string | null>(null);
   const [userAnswer, setUserAnswer] = useState('');
+  const [userAnswerImage, setUserAnswerImage] = useState<string | null>(null);
   const [tags, setTags] = useState('');
   const [importance, setImportance] = useState(3);
   const [practiceDate, setPracticeDate] = useState('2026-05-28');
   const [reviewNotes, setReviewNotes] = useState('');
   const [reviewImage, setReviewImage] = useState<string | null>(null);
-  const [solutions, setSolutions] = useState([{ channel_name: '粉笔', solution_text: '' }]);
+  const [solutions, setSolutions] = useState([{ channel_name: '粉笔', solution_text: '', solution_image: null as string | null }]);
 
   // 监听科目变更：实时联动拉取该科目名下的历史常用题型词典
   useEffect(() => {
@@ -46,7 +47,7 @@ export default function RecordForm({ onRecordAdded, onClose }: RecordFormProps) 
     setPracticeDate(today);
   }, []);
 
-  const handlePasteCapture = (e: React.ClipboardEvent, target: 'content' | 'review') => {
+  const handlePasteCapture = (e: React.ClipboardEvent, target: 'content' | 'review' | 'userAnswer' | 'solution', solIndex?: number) => {
     const items = e.clipboardData?.items;
     if (!items) return;
     for (let i = 0; i < items.length; i++) {
@@ -57,8 +58,15 @@ export default function RecordForm({ onRecordAdded, onClose }: RecordFormProps) 
           const reader = new FileReader();
           reader.onload = (event) => {
             if (event.target?.result) {
-              if (target === 'content') setContentImage(event.target.result as string);
-              if (target === 'review') setReviewImage(event.target.result as string);
+              const dataUrl = event.target.result as string;
+              if (target === 'content') setContentImage(dataUrl);
+              if (target === 'review') setReviewImage(dataUrl);
+              if (target === 'userAnswer') setUserAnswerImage(dataUrl);
+              if (target === 'solution' && typeof solIndex === 'number') {
+                const updated = [...solutions];
+                updated[solIndex] = { ...updated[solIndex], solution_image: dataUrl };
+                setSolutions(updated);
+              }
             }
           };
           reader.readAsDataURL(file);
@@ -68,7 +76,7 @@ export default function RecordForm({ onRecordAdded, onClose }: RecordFormProps) 
   };
 
   const addChannelRow = () => {
-    setSolutions([...solutions, { channel_name: '', solution_text: '' }]);
+    setSolutions([...solutions, { channel_name: '', solution_text: '', solution_image: null }]);
   };
 
   const removeChannelRow = (index: number) => {
@@ -86,9 +94,19 @@ export default function RecordForm({ onRecordAdded, onClose }: RecordFormProps) 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const payload = {
-      source, subject, question_type: questionType.trim() || '未分类题型', content_text: contentText, content_image: contentImage,
-      user_answer: userAnswer, tags, importance: Number(importance), practice_date: practiceDate,
-      review_notes: reviewNotes, review_image: reviewImage, solutions
+      source,
+      subject,
+      question_type: questionType.trim() || '未分类题型',
+      content_text: contentText,
+      content_image: contentImage,
+      user_answer: userAnswer,
+      user_answer_image: userAnswerImage,
+      tags,
+      importance: Number(importance),
+      practice_date: practiceDate,
+      review_notes: reviewNotes,
+      review_image: reviewImage,
+      solutions
     };
 
     const res = await fetch('/api/records', {
@@ -176,7 +194,7 @@ export default function RecordForm({ onRecordAdded, onClose }: RecordFormProps) 
                         className="w-full text-xs outline-none resize-none leading-relaxed text-slate-600" required />
               {contentImage && (
                 <div className="mt-2 relative inline-block border rounded-lg overflow-hidden bg-slate-50">
-                  < img src={contentImage} alt="题干截图" className="max-h-24 object-contain" />
+                  <img src={contentImage} alt="题干截图" className="max-h-24 object-contain" />
                   <button type="button" onClick={() => setContentImage(null)} className="absolute top-0 right-0 bg-red-500 text-white text-[9px] px-1 rounded-bl">静态擦除</button>
                 </div>
               )}
@@ -188,9 +206,16 @@ export default function RecordForm({ onRecordAdded, onClose }: RecordFormProps) 
             <div className="text-xs font-bold text-red-600 flex items-center gap-1">
               ❌ 你的作答记录内容
             </div>
-            <textarea placeholder="输入你当时的作答选项或申论草稿推演大段文字..."
+            <textarea onPaste={(e) => handlePasteCapture(e, 'userAnswer')}
+                      placeholder="输入你当时的作答选项或申论草稿推演大段文字，或直接粘贴截图..."
                       value={userAnswer} onChange={(e) => setUserAnswer(e.target.value)} rows={3}
                       className="w-full text-xs bg-transparent outline-none resize-none leading-relaxed text-slate-600" required />
+            {userAnswerImage && (
+              <div className="mt-2 relative inline-block border rounded-lg overflow-hidden bg-slate-50">
+                <img src={userAnswerImage} alt="作答截图" className="max-h-24 object-contain" />
+                <button type="button" onClick={() => setUserAnswerImage(null)} className="absolute top-0 right-0 bg-red-500 text-white text-[9px] px-1 rounded-bl">移除</button>
+              </div>
+            )}
           </div>
 
           {/* 第四行：多渠道对照 */}
@@ -207,8 +232,20 @@ export default function RecordForm({ onRecordAdded, onClose }: RecordFormProps) 
               {solutions.map((sol, idx) => (
                 <div key={idx} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-start border-b border-slate-100 pb-2">
                   <div className="md:col-span-3">
-                    <input type="text" placeholder="参考答案 或 核心解题思路" value={sol.solution_text} onChange={(e) => handleChannelChange(idx, 'solution_text', e.target.value)}
-                           className="w-full border-b border-slate-200 py-1.5 text-xs outline-none bg-transparent focus:border-blue-500" required />
+                    <textarea onPaste={(e) => handlePasteCapture(e, 'solution', idx)}
+                              placeholder="参考答案 或 核心解题思路，支持粘贴截图"
+                              value={sol.solution_text} onChange={(e) => handleChannelChange(idx, 'solution_text', e.target.value)}
+                              className="w-full border-b border-slate-200 py-1.5 text-xs outline-none bg-transparent focus:border-blue-500 resize-none" rows={2} required />
+                    {sol.solution_image && (
+                      <div className="mt-2 relative inline-block border rounded-lg overflow-hidden bg-slate-50">
+                        <img src={sol.solution_image} alt={`渠道${idx}截图`} className="max-h-24 object-contain" />
+                        <button type="button" onClick={() => {
+                          const updated = [...solutions];
+                          updated[idx] = { ...updated[idx], solution_image: null };
+                          setSolutions(updated);
+                        }} className="absolute top-0 right-0 bg-red-500 text-white text-[9px] px-1 rounded-bl">移除</button>
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-1">
                     <input type="text" placeholder="渠道来源(如:粉笔)" value={sol.channel_name} onChange={(e) => handleChannelChange(idx, 'channel_name', e.target.value)}
@@ -256,7 +293,7 @@ export default function RecordForm({ onRecordAdded, onClose }: RecordFormProps) 
                         className="w-full text-xs bg-transparent outline-none resize-none leading-relaxed text-slate-600 focus:ring-0" required />
               {reviewImage && (
                 <div className="mt-2 relative inline-block border border-amber-200 rounded-lg overflow-hidden bg-white">
-                  < img src={reviewImage} alt="复盘动态思维导图" className="max-h-36 object-contain" />
+                  <img src={reviewImage} alt="复盘动态思维导图" className="max-h-36 object-contain" />
                   <button type="button" onClick={() => setReviewImage(null)} className="absolute top-0 right-0 bg-red-500 text-white text-[9px] px-1 rounded-bl">静态解构</button>
                 </div>
               )}

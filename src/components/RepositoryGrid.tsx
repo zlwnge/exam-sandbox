@@ -7,6 +7,7 @@ interface Solution {
   id: string;
   channel_name: string;
   solution_text: string;
+  solution_image?: string | null;
 }
 
 interface StudyRecord {
@@ -17,6 +18,7 @@ interface StudyRecord {
   content_text: string;
   content_image: string | null;
   user_answer: string;
+  user_answer_image?: string | null;
   tags: string;
   importance: number;
   practice_date: string;
@@ -282,7 +284,7 @@ export default function RepositoryGrid({ initialFilters }: { initialFilters?: { 
                     </p >
                     {activeRecord.content_image && (
                       <div className="mt-3 border rounded-lg overflow-hidden bg-white shadow-2xs">
-                        < img src={activeRecord.content_image} alt="题干截图" className="max-h-64 w-full object-contain mx-auto" />
+                        <img src={activeRecord.content_image} alt="题干截图" className="max-h-64 w-full object-contain mx-auto" />
                       </div>
                     )}
                   </div>
@@ -295,6 +297,11 @@ export default function RepositoryGrid({ initialFilters }: { initialFilters?: { 
                     <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed select-text font-mono bg-white p-3 rounded-lg border border-red-100/60 shadow-2xs">
                       {activeRecord.user_answer}
                     </p >
+                    {activeRecord.user_answer_image && (
+                      <div className="mt-2 border rounded-lg overflow-hidden bg-white">
+                        <img src={activeRecord.user_answer_image} alt="作答截图" className="max-h-48 w-full object-contain mx-auto" />
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -314,9 +321,14 @@ export default function RepositoryGrid({ initialFilters }: { initialFilters?: { 
                                 {sol.channel_name}
                               </span>
                             </div>
-                            <p className="text-xs text-slate-600 leading-relaxed font-normal select-text">
-                              {sol.solution_text}
-                            </p >
+                                <p className="text-xs text-slate-600 leading-relaxed font-normal select-text">
+                                  {sol.solution_text}
+                                </p >
+                                {sol.solution_image && (
+                                  <div className="mt-2 border rounded-lg overflow-hidden bg-white">
+                                    <img src={sol.solution_image} alt={`${sol.channel_name} 截图`} className="max-h-56 w-full object-contain mx-auto" />
+                                  </div>
+                                )}
                           </div>
                         ))
                       ) : (
@@ -335,7 +347,7 @@ export default function RepositoryGrid({ initialFilters }: { initialFilters?: { 
                     </p >
                     {activeRecord.review_image && (
                       <div className="mt-2 border border-amber-100 rounded-lg overflow-hidden bg-white shadow-2xs">
-                        < img src={activeRecord.review_image} alt="复盘切图" className="max-h-56 w-full object-contain mx-auto" />
+                        <img src={activeRecord.review_image} alt="复盘切图" className="max-h-56 w-full object-contain mx-auto" />
                       </div>
                     )}
                   </div>

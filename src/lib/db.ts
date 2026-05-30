@@ -16,6 +16,7 @@ db.exec(`
     question_type TEXT NOT NULL,
     content_text TEXT NOT NULL,
     content_image TEXT,
+    user_answer_image TEXT,
     user_answer TEXT NOT NULL,
     tags TEXT NOT NULL,
     importance INTEGER NOT NULL,
@@ -30,6 +31,24 @@ db.exec(`
     record_id TEXT NOT NULL,
     channel_name TEXT NOT NULL,
     solution_text TEXT NOT NULL,
+    solution_image TEXT,
     FOREIGN KEY(record_id) REFERENCES study_records(id) ON DELETE CASCADE
   );
 `);
+
+// If tables existed previously, ensure new optional columns exist (safe migration)
+try {
+  const infoRec = db.prepare(`PRAGMA table_info(study_records)`).all();
+  const hasUserAnswerImage = infoRec.some((c: any) => c.name === 'user_answer_image');
+  if (!hasUserAnswerImage) {
+    db.exec(`ALTER TABLE study_records ADD COLUMN user_answer_image TEXT;`);
+  }
+
+  const infoSol = db.prepare(`PRAGMA table_info(channel_solutions)`).all();
+  const hasSolutionImage = infoSol.some((c: any) => c.name === 'solution_image');
+  if (!hasSolutionImage) {
+    db.exec(`ALTER TABLE channel_solutions ADD COLUMN solution_image TEXT;`);
+  }
+} catch (err) {
+  console.warn('DB migration warning:', err);
+}
