@@ -141,7 +141,7 @@ export default function RepositoryGrid({ initialFilters }: { initialFilters?: { 
 
   const parseTags = (tagStr: string) => {
     if (!tagStr) return [];
-    return tagStr.split(/[,，]/).map(t => t.trim()).filter(Boolean);
+    return tagStr.split(/[,，、]/).map(t => t.trim()).filter(Boolean);
   };
 
   return (

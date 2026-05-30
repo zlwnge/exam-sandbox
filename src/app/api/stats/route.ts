@@ -27,7 +27,7 @@ export async function GET(request: Request) {
         const tagRows = db.prepare(`SELECT tags FROM study_records WHERE subject = ? AND question_type = ? AND tags IS NOT NULL AND tags != ''`).all(s.subject, t.question_type) as { tags: string }[];
         const tagMap: Record<string, number> = {};
         for (const r of tagRows) {
-          const parts = r.tags.split(/[,，]/).map(x => x.trim()).filter(Boolean);
+          const parts = r.tags.split(/[,，、]/).map(x => x.trim()).filter(Boolean);
           for (const p of parts) {
             tagMap[p] = (tagMap[p] || 0) + 1;
           }

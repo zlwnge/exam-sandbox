@@ -52,3 +52,17 @@ try {
 } catch (err) {
   console.warn('DB migration warning:', err);
 }
+
+// 创建索引以提升按日期/科目/题型/标签的查询性能
+try {
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_study_records_practice_date ON study_records(practice_date);
+    CREATE INDEX IF NOT EXISTS idx_study_records_subject ON study_records(subject);
+    CREATE INDEX IF NOT EXISTS idx_study_records_question_type ON study_records(question_type);
+    CREATE INDEX IF NOT EXISTS idx_study_records_tags ON study_records(tags);
+    -- 复合索引提高按科目+题型联合筛选效率
+    CREATE INDEX IF NOT EXISTS idx_study_records_subject_qtype ON study_records(subject, question_type);
+  `);
+} catch (err) {
+  console.warn('DB index creation warning:', err);
+}

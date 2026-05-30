@@ -347,8 +347,8 @@ export default function RecordForm({ onRecordAdded, onRecordUpdated, onClose, re
           {/* 第五行：属性快照 */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border border-slate-100 p-4 rounded-2xl bg-slate-50/40">
             <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1">知识点标签快照 <span className="text-[10px] text-slate-400 font-normal">(英文逗号分隔)</span></label>
-              <input type="text" placeholder="如: 增长率, 资料分析" value={tags} onChange={(e) => setTags(e.target.value)}
+              <label className="block text-xs font-bold text-slate-600 mb-1">知识点标签快照 <span className="text-[10px] text-slate-400 font-normal">(用逗号或、分隔)</span></label>
+              <input type="text" placeholder="如: 增长率、资料分析 或 增长率, 资料分析" value={tags} onChange={(e) => setTags(e.target.value)}
                      className="w-full border border-slate-200 p-2 rounded-xl text-xs outline-none bg-white focus:border-blue-500" required />
             </div>
             <div>

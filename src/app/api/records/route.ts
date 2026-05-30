@@ -4,6 +4,90 @@ import { randomUUID } from 'crypto'; // 🔥 修复：改为标准的强类型 U
 import fs from 'fs';
 import path from 'path';
 
+// ---- Types & normalization helpers ----
+interface SolutionPayload {
+  id?: string;
+  channel_name?: unknown;
+  solution_text?: unknown;
+  solution_image?: unknown;
+}
+
+interface RecordPayload {
+  id?: string;
+  source?: unknown;
+  subject?: unknown;
+  question_type?: unknown;
+  content_text?: unknown;
+  content_image?: unknown;
+  user_answer?: unknown;
+  user_answer_image?: unknown;
+  tags?: unknown;
+  importance?: unknown;
+  practice_date?: unknown;
+  review_notes?: unknown;
+  review_image?: unknown;
+  solutions?: SolutionPayload[];
+}
+
+interface NormalizedSolution {
+  id?: string;
+  channel_name: string;
+  solution_text: string;
+  solution_image: string | null;
+}
+
+interface NormalizedRecord {
+  id?: string;
+  source: string;
+  subject: string;
+  question_type: string;
+  content_text: string;
+  content_image: string | null;
+  user_answer: string;
+  user_answer_image: string | null;
+  tags: string;
+  importance: number;
+  practice_date: string;
+  review_notes: string;
+  review_image: string | null;
+  solutions: NormalizedSolution[];
+}
+
+function toStr(v: unknown) {
+  if (v === undefined || v === null) return '';
+  return String(v);
+}
+
+function normalizeRecordPayload(input: RecordPayload): NormalizedRecord {
+  const solIn = Array.isArray(input.solutions) ? input.solutions : [];
+  const solutions: NormalizedSolution[] = solIn.map((s: SolutionPayload) => ({
+    id: s?.id,
+    channel_name: toStr(s?.channel_name) || '未命名渠道',
+    solution_text: toStr(s?.solution_text) || '',
+    solution_image: s?.solution_image && typeof s.solution_image === 'string' ? s.solution_image : null
+  }));
+
+  const today = new Date().toISOString().split('T')[0];
+
+  return {
+    id: input.id,
+    source: toStr(input.source),
+    subject: toStr(input.subject),
+    question_type: toStr(input.question_type),
+    content_text: toStr(input.content_text),
+    content_image: input.content_image && typeof input.content_image === 'string' ? input.content_image : null,
+    user_answer: toStr(input.user_answer),
+    user_answer_image: input.user_answer_image && typeof input.user_answer_image === 'string' ? input.user_answer_image : null,
+    tags: toStr(input.tags),
+    importance: Number(input.importance) || 3,
+    practice_date: toStr(input.practice_date) || today,
+    review_notes: toStr(input.review_notes),
+    review_image: input.review_image && typeof input.review_image === 'string' ? input.review_image : null,
+    solutions
+  };
+}
+
+
 // helper: save data URL (base64) to public/uploads and return web path
 async function saveDataUrlToFile(dataUrl: string, subfolder = ''): Promise<string | null> {
   try {
@@ -35,11 +119,10 @@ export async function POST(request: Request) {
     const json = await request.json();
     const recordId = randomUUID(); // 生成主记录的唯一物理主键
 
-    let {
-      source, subject, question_type, content_text, content_image,
+    const normalized = normalizeRecordPayload(json as RecordPayload);
+    let { source, subject, question_type, content_text, content_image,
       user_answer, user_answer_image, tags, importance, practice_date, review_notes, review_image,
-      solutions
-    } = json;
+      solutions } = normalized;
 
     // 如果有 data URL 图片，保存到文件系统并替换为文件路径
     const todayFolder = new Date().toISOString().slice(0,10).replace(/-/g, '');
@@ -68,12 +151,6 @@ export async function POST(request: Request) {
     if (!source || !subject || !question_type || (!content_text && !content_image)) {
       return NextResponse.json({ success: false, error: '必填基础档案元数据不完整' }, { status: 400 });
     }
-
-    // 为满足 DB 的 NOT NULL 约束，将可能为 undefined/null 的文本字段归一化为非空字符串
-    content_text = content_text || '';
-    user_answer = user_answer || '';
-    review_notes = review_notes || '';
-    tags = tags || '';
 
     const insertRecord = db.prepare(`
       INSERT INTO study_records (id, source, subject, question_type, content_text, content_image, user_answer, user_answer_image, tags, importance, practice_date, review_notes, review_image)
@@ -175,14 +252,14 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   try {
     const json = await request.json();
-    const { id } = json;
+    const incoming = json as RecordPayload;
+    const { id } = incoming;
     if (!id) return NextResponse.json({ success: false, error: '缺少记录 id' }, { status: 400 });
 
-    let {
-      source, subject, question_type, content_text, content_image,
+    const normalized = normalizeRecordPayload(incoming);
+    let { source, subject, question_type, content_text, content_image,
       user_answer, user_answer_image, tags, importance, practice_date, review_notes, review_image,
-      solutions
-    } = json;
+      solutions } = normalized;
 
     const todayFolder = new Date().toISOString().slice(0,10).replace(/-/g, '');
     if (content_image && typeof content_image === 'string' && content_image.startsWith('data:')) {
