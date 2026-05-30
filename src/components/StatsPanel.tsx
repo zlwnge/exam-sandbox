@@ -95,7 +95,50 @@ export default function StatsPanel({ onNavigate }: { onNavigate: (f: { subject?:
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-4">
-      <h4 className="text-xs font-bold text-slate-700 mb-3">科目 - 题型 - 知识点</h4>
+      <div className="flex items-center justify-between">
+        <h4 className="text-xs font-bold text-slate-700 mb-3">科目 - 题型 - 知识点</h4>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            <button onClick={() => { window.location.href = '/api/export?format=json'; }} className="text-[12px] bg-slate-50 px-2 py-1 rounded-md text-slate-600 hover:bg-slate-100">导出 JSON</button>
+            <button onClick={() => { window.location.href = '/api/export?format=csv'; }} className="text-[12px] bg-slate-50 px-2 py-1 rounded-md text-slate-600 hover:bg-slate-100">导出 CSV</button>
+            <button onClick={() => { window.location.href = '/api/export?format=zip'; }} className="text-[12px] bg-slate-50 px-2 py-1 rounded-md text-slate-600 hover:bg-slate-100">下载 ZIP（含图）</button>
+          </div>
+          <label className="text-[12px] bg-slate-50 px-2 py-1 rounded-md text-slate-600 hover:bg-slate-100 cursor-pointer">
+            导入
+            <input type="file" accept="application/json,text/csv" onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = async () => {
+                try {
+                  const ct = file.type || (file.name.endsWith('.csv') ? 'text/csv' : 'application/json');
+                  let body: BodyInit;
+                  let headers: any = {};
+                  if (ct === 'text/csv') {
+                    body = reader.result as string;
+                    headers['Content-Type'] = 'text/csv';
+                  } else {
+                    body = reader.result as string;
+                    headers['Content-Type'] = 'application/json';
+                  }
+                  const res = await fetch('/api/import', { method: 'POST', headers, body });
+                  const data = await res.json();
+                  if (res.ok && data.success) {
+                    alert('导入成功: ' + (data.count || 0));
+                    location.reload();
+                  } else {
+                    alert('导入失败: ' + (data.error || '未知错误'));
+                  }
+                } catch (err) {
+                  console.error('import err', err);
+                  alert('导入异常，请查看控制台');
+                }
+              };
+              reader.readAsText(file);
+            }} style={{ display: 'none' }} />
+          </label>
+        </div>
+      </div>
       {subjectsArea}
       <div className="mt-3">
         {typesList()}
