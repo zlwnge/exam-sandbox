@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Search, Eye, Star, Tag, Calendar, X, BookOpen, Layers } from 'lucide-react';
+import RecordForm from './RecordForm';
 
 interface Solution {
   id: string;
@@ -40,6 +41,7 @@ export default function RepositoryGrid({ initialFilters }: { initialFilters?: { 
 
   // 查看详情弹窗控制
   const [activeRecord, setActiveRecord] = useState<StudyRecord | null>(null);
+  const [showEditForm, setShowEditForm] = useState(false);
 
   // ref used to hold desired question_type until types list loads
   const desiredTypeRef = React.useRef<string | null>(null);
@@ -365,18 +367,58 @@ export default function RepositoryGrid({ initialFilters }: { initialFilters?: { 
                   </span>
                 ))}
               </div>
-              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4">
                 <span className="font-mono text-[11px] text-slate-400">
                   演练时刻: {activeRecord.practice_date}
                 </span>
-                <button onClick={() => setActiveRecord(null)} className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-1.5 rounded-xl font-bold text-[11px] transition-all shadow-md active:scale-95">
-                  结束并关闭档案
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setShowEditForm(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-xl font-bold text-[11px] transition-all shadow-md active:scale-95">
+                    编辑档案
+                  </button>
+                  <button onClick={async () => {
+                    const ok = confirm('确认删除该档案？删除后无法恢复。');
+                    if (!ok) return;
+                    try {
+                      const res = await fetch('/api/records', {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: activeRecord.id })
+                      });
+                      const data = await res.json();
+                      if (res.ok && data.success) {
+                        alert('🗑️ 档案已删除');
+                        setActiveRecord(null);
+                        fetchRecords();
+                      } else {
+                        alert('删除失败: ' + (data.error || '未知错误'));
+                      }
+                    } catch (err) {
+                      console.error('删除请求失败', err);
+                      alert('删除请求失败，请查看控制台');
+                    }
+                  }} className="bg-red-600 hover:bg-red-700 text-white px-4 py-1.5 rounded-xl font-bold text-[11px] transition-all shadow-md active:scale-95">
+                    删除档案
+                  </button>
+                  <button onClick={() => setActiveRecord(null)} className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-1.5 rounded-xl font-bold text-[11px] transition-all shadow-md active:scale-95">
+                    结束并关闭档案
+                  </button>
+                </div>
               </div>
             </div>
 
           </div>
         </div>
+      )}
+      {showEditForm && activeRecord && (
+        <RecordForm
+          record={activeRecord}
+          onRecordUpdated={() => {
+            fetchRecords();
+            setShowEditForm(false);
+            setActiveRecord(null);
+          }}
+          onClose={() => setShowEditForm(false)}
+        />
       )}
     </div>
   );

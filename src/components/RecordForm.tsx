@@ -4,11 +4,13 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, X } from 'lucide-react';
 
 interface RecordFormProps {
-  onRecordAdded: () => void;
+  onRecordAdded?: () => void;
+  onRecordUpdated?: () => void;
   onClose: () => void;
+  record?: any; // optional existing record for edit
 }
 
-export default function RecordForm({ onRecordAdded, onClose }: RecordFormProps) {
+export default function RecordForm({ onRecordAdded, onRecordUpdated, onClose, record }: RecordFormProps) {
   const [source, setSource] = useState('');
   // ⚡ 变更 1：科目默认为三大硬核体系之首“行测”
   const [subject, setSubject] = useState('行测');
@@ -28,6 +30,27 @@ export default function RecordForm({ onRecordAdded, onClose }: RecordFormProps) 
   const [reviewImage, setReviewImage] = useState<string | null>(null);
    const [solutions, setSolutions] = useState([{ channel_name: '粉笔', solution_text: '', solution_image: null as string | null }]); 
    const [errors, setErrors] = useState<{ [key: string]: any }>({});
+
+  // populate form when editing an existing record
+  useEffect(() => {
+    if (record) {
+      setSource(record.source || '');
+      setSubject(record.subject || '行测');
+      setQuestionType(record.question_type || '');
+      setContentText(record.content_text || '');
+      setContentImage(record.content_image || null);
+      setUserAnswer(record.user_answer || '');
+      setUserAnswerImage(record.user_answer_image || null);
+      setTags(record.tags || '');
+      setImportance(record.importance ?? 3);
+      setPracticeDate(record.practice_date || new Date().toISOString().split('T')[0]);
+      setReviewNotes(record.review_notes || '');
+      setReviewImage(record.review_image || null);
+      if (Array.isArray(record.solutions) && record.solutions.length > 0) {
+        setSolutions(record.solutions.map((s: any) => ({ channel_name: s.channel_name || '', solution_text: s.solution_text || '', solution_image: s.solution_image || null })));
+      }
+    }
+  }, [record]);
 
   // 监听科目变更：实时联动拉取该科目名下的历史常用题型词典
   useEffect(() => {
@@ -151,20 +174,35 @@ export default function RecordForm({ onRecordAdded, onClose }: RecordFormProps) 
       return;
     }
 
-    const res = await fetch('/api/records', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    // decide create vs update
+    let res;
+    if (record && record.id) {
+      const body = { id: record.id, ...payload };
+      res = await fetch('/api/records', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+    } else {
+      res = await fetch('/api/records', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    }
 
     const responseData = await res.json();
-
     if (res.ok && responseData.success) {
-      alert('📦 考公精细化方法论模型已完美切片并存入本地物理底座！');
-      onRecordAdded();
+      if (record && record.id) {
+        alert('✅ 档案已更新');
+        onRecordUpdated && onRecordUpdated();
+      } else {
+        alert('📦 新档案已入库');
+        onRecordAdded && onRecordAdded();
+      }
       onClose();
     } else {
-      alert(`❌ 入库遭遇阻断: ${responseData.error || '未知数据库事物拒绝'}`);
+      alert(`❌ 操作失败: ${responseData.error || '服务器返回未知错误'}`);
     }
   };
 

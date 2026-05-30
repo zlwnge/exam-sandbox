@@ -64,15 +64,16 @@ export async function POST(request: Request) {
       }
     }
 
-    // Normalize text fields to avoid NULL NOT NULL conflicts in DB
+    // 健壮性防空御盾：确保核心元数据不为空。允许以图片替代文本（content_text 可由 content_image 替代）
+    if (!source || !subject || !question_type || (!content_text && !content_image)) {
+      return NextResponse.json({ success: false, error: '必填基础档案元数据不完整' }, { status: 400 });
+    }
+
+    // 为满足 DB 的 NOT NULL 约束，将可能为 undefined/null 的文本字段归一化为非空字符串
     content_text = content_text || '';
     user_answer = user_answer || '';
     review_notes = review_notes || '';
-
-    // 健壮性防空：允许只提供图片而不提供文本（例如：只粘贴截图）
-    if (!source || !subject || !question_type || (!(content_text && String(content_text).trim()) && !content_image)) {
-      return NextResponse.json({ success: false, error: '必填基础档案元数据不完整：请提供题目文本或题目截图' }, { status: 400 });
-    }
+    tags = tags || '';
 
     const insertRecord = db.prepare(`
       INSERT INTO study_records (id, source, subject, question_type, content_text, content_image, user_answer, user_answer_image, tags, importance, practice_date, review_notes, review_image)
@@ -94,13 +95,11 @@ export async function POST(request: Request) {
       
       if (Array.isArray(data.solutions)) {
         for (const sol of data.solutions) {
-          const solText = (sol.solution_text || '').toString();
-          const solImage = sol.solution_image || null;
-          // Persist solution if it has text content or an image
-          if ((solText && solText.trim()) || solImage) {
+          const txt = sol.solution_text ? String(sol.solution_text).trim() : '';
+          const hasImage = !!sol.solution_image;
+          if (txt || hasImage) { // 持久化有文本或有图片的解析行
             const solId = randomUUID();
-            const channel = (sol.channel_name && String(sol.channel_name).trim()) ? sol.channel_name : '未命名渠道';
-            insertSolution.run(solId, id, channel, solText, solImage);
+            insertSolution.run(solId, id, sol.channel_name || '未命名渠道', sol.solution_text || '', sol.solution_image || null);
           }
         }
       }
@@ -170,5 +169,119 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, records: Object.values(recordsMap) });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    const json = await request.json();
+    const { id } = json;
+    if (!id) return NextResponse.json({ success: false, error: '缺少记录 id' }, { status: 400 });
+
+    let {
+      source, subject, question_type, content_text, content_image,
+      user_answer, user_answer_image, tags, importance, practice_date, review_notes, review_image,
+      solutions
+    } = json;
+
+    const todayFolder = new Date().toISOString().slice(0,10).replace(/-/g, '');
+    if (content_image && typeof content_image === 'string' && content_image.startsWith('data:')) {
+      const saved = await saveDataUrlToFile(content_image, todayFolder);
+      if (saved) content_image = saved;
+    }
+    if (review_image && typeof review_image === 'string' && review_image.startsWith('data:')) {
+      const saved = await saveDataUrlToFile(review_image, todayFolder);
+      if (saved) review_image = saved;
+    }
+    if (user_answer_image && typeof user_answer_image === 'string' && user_answer_image.startsWith('data:')) {
+      const saved = await saveDataUrlToFile(user_answer_image, todayFolder);
+      if (saved) user_answer_image = saved;
+    }
+    if (Array.isArray(solutions)) {
+      for (const sol of solutions) {
+        if (sol && sol.solution_image && typeof sol.solution_image === 'string' && sol.solution_image.startsWith('data:')) {
+          const saved = await saveDataUrlToFile(sol.solution_image, todayFolder);
+          if (saved) sol.solution_image = saved;
+        }
+      }
+    }
+
+    // 允许 image 替代文本
+    if (!source || !subject || !question_type || (!content_text && !content_image)) {
+      return NextResponse.json({ success: false, error: '必填基础档案元数据不完整' }, { status: 400 });
+    }
+
+    // 归一化为非空字符串以满足 DB NOT NULL 约束
+    content_text = content_text || '';
+    user_answer = user_answer || '';
+    review_notes = review_notes || '';
+    tags = tags || '';
+
+    const updateRecord = db.prepare(`
+      UPDATE study_records SET source = ?, subject = ?, question_type = ?, content_text = ?, content_image = ?, user_answer = ?, user_answer_image = ?, tags = ?, importance = ?, practice_date = ?, review_notes = ?, review_image = ? WHERE id = ?
+    `);
+
+    const deleteSolutions = db.prepare(`DELETE FROM channel_solutions WHERE record_id = ?`);
+    const insertSolution = db.prepare(`
+      INSERT INTO channel_solutions (id, record_id, channel_name, solution_text, solution_image)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+
+    const runTx = db.transaction((rid: string, data: any) => {
+      updateRecord.run(
+        data.source, data.subject, data.question_type, data.content_text, data.content_image,
+        data.user_answer, data.user_answer_image, data.tags, Number(data.importance), data.practice_date,
+        data.review_notes, data.review_image, rid
+      );
+
+      deleteSolutions.run(rid);
+
+      if (Array.isArray(data.solutions)) {
+        for (const sol of data.solutions) {
+          const txt = sol.solution_text ? String(sol.solution_text).trim() : '';
+          const hasImage = !!sol.solution_image;
+          if (txt || hasImage) {
+            const solId = randomUUID();
+            insertSolution.run(solId, rid, sol.channel_name || '未命名渠道', sol.solution_text || '', sol.solution_image || null);
+          }
+        }
+      }
+    });
+
+    runTx(id, { source, subject, question_type, content_text, content_image, user_answer, user_answer_image, tags, importance, practice_date, review_notes, review_image, solutions });
+
+    return NextResponse.json({ success: true, id }, { status: 200 });
+  } catch (err: any) {
+    console.error('PUT /api/records error', err);
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    // 支持通过 body.json() 提供 { id }
+    let id: string | null = null;
+    try {
+      const payload = await request.json();
+      id = payload?.id || null;
+    } catch (e) {
+      // 如果没有 body，尝试从 query param 获取
+      const url = new URL(request.url);
+      id = url.searchParams.get('id');
+    }
+
+    if (!id) return NextResponse.json({ success: false, error: '缺少记录 id' }, { status: 400 });
+
+    const del = db.prepare(`DELETE FROM study_records WHERE id = ?`);
+    const info = del.run(id);
+
+    if (info.changes && info.changes > 0) {
+      return NextResponse.json({ success: true, id });
+    } else {
+      return NextResponse.json({ success: false, error: '未找到该记录' }, { status: 404 });
+    }
+  } catch (err: any) {
+    console.error('DELETE /api/records error', err);
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
