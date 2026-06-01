@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { emitRecordChange } from '@/lib/serverEventBus';
+
+export const dynamic = 'force-dynamic';
 import { randomUUID } from 'crypto'; // 🔥 修复：改为标准的强类型 UUID 发生器导入
 import fs from 'fs';
 import path from 'path';

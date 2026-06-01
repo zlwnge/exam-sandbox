@@ -76,7 +76,7 @@ export default function MainAppShell() {
               {/* GitHub 时空贡献度热力图保持常驻 */}
               <GithubHeatmap key={`hm-${refreshTrigger}`} />
               {/* 实时统计面板：科目 / 细分题型 / 知识点 */}
-              <StatsPanel onNavigate={(f) => { setPresetFilters(f); setActiveTab('repository'); setRefreshTrigger(prev => prev + 1); }} />
+              <StatsPanel key={`stats-${refreshTrigger}`} onNavigate={(f) => { setPresetFilters(f); setActiveTab('repository'); setRefreshTrigger(prev => prev + 1); }} />
               
               {/* 简易说明引导 */}
               <div className="bg-white p-5 rounded-xl border text-xs text-slate-400 leading-relaxed">

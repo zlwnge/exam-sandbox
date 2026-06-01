@@ -12,7 +12,7 @@ export async function GET() {
   const stream = new ReadableStream({
     start(controller) {
       // keep-alive newline every ~15s to prevent proxies closing the connection
-      const keepAlive = setInterval(() => controller.enqueue(encoder.encode(':keepalive\n\n')) , 15000);
+      const keepAlive = setInterval(() => controller.enqueue(encoder.encode(':keepalive\n\n')), 15000);
 
       const onEvent = (msg: string) => {
         try {
@@ -22,14 +22,22 @@ export async function GET() {
         }
       };
 
-      // register listener
-      const off = onRecordChange(onEvent);
-
+      // Set up a basic cleanup (without event listener removal) immediately
+      // in case the stream is cancelled before onRecordChange resolves
       cleanup = () => {
         clearInterval(keepAlive);
-        off();
         try { controller.close(); } catch (e) {}
       };
+
+      // onRecordChange is async (for Redis init); use .then() to get the real off function
+      onRecordChange(onEvent).then((off) => {
+        // Replace cleanup with the full version that also removes the event listener
+        cleanup = () => {
+          clearInterval(keepAlive);
+          off();
+          try { controller.close(); } catch (e) {}
+        };
+      });
 
       // initial connected message
       controller.enqueue(encoder.encode('data: connected\n\n'));

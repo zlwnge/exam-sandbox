@@ -27,12 +27,18 @@ export default function StatsPanel({ onNavigate }: { onNavigate: (f: { subject?:
           }
         }
       })
-      .catch(() => {})
+      .catch((err) => { console.error('[StatsPanel] Initial fetch failed:', err); })
       .finally(() => mounted && setLoading(false));
     // SSE subscription for cross-client updates
     let es: EventSource | null = null;
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+    let pollCheckTimeout: ReturnType<typeof setTimeout> | null = null;
+    let sseConnected = false;
     try {
       es = new EventSource('/api/records/stream');
+      es.onopen = () => {
+        sseConnected = true;
+      };
       es.onmessage = () => {
         // refresh stats on any record event
         fetch('/api/stats').then(res => res.json()).then(data => {
@@ -43,16 +49,40 @@ export default function StatsPanel({ onNavigate }: { onNavigate: (f: { subject?:
               setSelectedSubject(data.hierarchy[0].subject);
             }
           }
-        }).catch(() => {});
+        }).catch((err) => { console.error('[StatsPanel] SSE refresh fetch failed:', err); });
       };
       es.onerror = () => {
-        // swallow; EventSource will try to reconnect
+        console.error('[StatsPanel] SSE connection error, will retry automatically');
+        sseConnected = false;
       };
+      // Fallback polling: if SSE doesn't connect within 10s, start polling every 30s
+      pollCheckTimeout = setTimeout(() => {
+        if (mounted && !sseConnected) {
+          console.warn('[StatsPanel] SSE not connected, falling back to polling');
+          pollInterval = setInterval(() => {
+            if (!mounted) return;
+            fetch('/api/stats').then(res => res.json()).then(data => {
+              if (!mounted) return;
+              if (data.success) {
+                setHierarchy(data.hierarchy || []);
+                if (data.hierarchy && data.hierarchy.length > 0 && !selectedSubject) {
+                  setSelectedSubject(data.hierarchy[0].subject);
+                }
+              }
+            }).catch((err) => { console.error('[StatsPanel] Poll fetch failed:', err); });
+          }, 30000);
+        }
+      }, 10000);
     } catch (e) {
-      // ignore (EventSource may not be available in some environments)
+      console.error('[StatsPanel] EventSource init failed:', e);
     }
 
-    return () => { mounted = false; if (es) es.close(); };
+    return () => {
+      mounted = false;
+      if (es) es.close();
+      if (pollCheckTimeout) clearTimeout(pollCheckTimeout);
+      if (pollInterval) clearInterval(pollInterval);
+    };
   }, []);
 
   const handleNavigate = (payload: { subject?: string; question_type?: string; tag?: string; autoRun?: boolean }) => {
