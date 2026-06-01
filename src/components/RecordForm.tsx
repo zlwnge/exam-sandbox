@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { normalizeUploadPath } from '@/lib/url';
 import { Plus, Trash2, X } from 'lucide-react';
 
 interface RecordFormProps {
@@ -275,7 +276,7 @@ export default function RecordForm({ onRecordAdded, onRecordUpdated, onClose, re
               {errors.content && <div className="text-red-500 text-xs mt-1">{errors.content}</div>}
               {contentImage && (
                 <div className="mt-2 relative inline-block border rounded-lg overflow-hidden bg-slate-50">
-                  <img src={contentImage} alt="题干截图" className="max-h-24 object-contain" />
+                  <img src={normalizeUploadPath(contentImage)} alt="题干截图" className="max-h-24 object-contain" />
                   <button type="button" onClick={() => setContentImage(null)} className="absolute top-0 right-0 bg-red-500 text-white text-[9px] px-1 rounded-bl">静态擦除</button>
                 </div>
               )}
@@ -294,7 +295,7 @@ export default function RecordForm({ onRecordAdded, onRecordUpdated, onClose, re
             {errors.userAnswer && <div className="text-red-500 text-xs mt-1">{errors.userAnswer}</div>}
             {userAnswerImage && (
               <div className="mt-2 relative inline-block border rounded-lg overflow-hidden bg-slate-50">
-                <img src={userAnswerImage} alt="作答截图" className="max-h-24 object-contain" />
+                <img src={normalizeUploadPath(userAnswerImage)} alt="作答截图" className="max-h-24 object-contain" />
                 <button type="button" onClick={() => setUserAnswerImage(null)} className="absolute top-0 right-0 bg-red-500 text-white text-[9px] px-1 rounded-bl">移除</button>
               </div>
             )}
@@ -321,7 +322,7 @@ export default function RecordForm({ onRecordAdded, onRecordUpdated, onClose, re
                     {errors.solutions && errors.solutions[idx] && <div className="text-red-500 text-xs mt-1">{errors.solutions[idx]}</div>}
                     {sol.solution_image && (
                       <div className="mt-2 relative inline-block border rounded-lg overflow-hidden bg-slate-50">
-                        <img src={sol.solution_image} alt={`渠道${idx}截图`} className="max-h-24 object-contain" />
+                        <img src={normalizeUploadPath(sol.solution_image)} alt={`渠道${idx}截图`} className="max-h-24 object-contain" />
                         <button type="button" onClick={() => {
                           const updated = [...solutions];
                           updated[idx] = { ...updated[idx], solution_image: null };
@@ -377,7 +378,7 @@ export default function RecordForm({ onRecordAdded, onRecordUpdated, onClose, re
               {errors.review && <div className="text-red-500 text-xs mt-1">{errors.review}</div>}
               {reviewImage && (
                 <div className="mt-2 relative inline-block border border-amber-200 rounded-lg overflow-hidden bg-white">
-                  <img src={reviewImage} alt="复盘动态思维导图" className="max-h-36 object-contain" />
+                  <img src={normalizeUploadPath(reviewImage)} alt="复盘动态思维导图" className="max-h-36 object-contain" />
                   <button type="button" onClick={() => setReviewImage(null)} className="absolute top-0 right-0 bg-red-500 text-white text-[9px] px-1 rounded-bl">静态解构</button>
                 </div>
               )}

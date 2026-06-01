@@ -79,11 +79,17 @@ export async function GET(request: Request) {
         for (const s of r.solutions || []) imgs.push(s.solution_image);
         for (const img of imgs) {
           if (!img || typeof img !== 'string') continue;
-          if (!img.startsWith('/uploads/')) continue; // only include local uploads
-          const rel = img.replace(/^\/|^\//, '');
-          const full = path.join(process.cwd(), 'public', rel.replace(/\//g, path.sep));
-          if (fs.existsSync(full) && !added.has(full)) {
-            const entryName = path.join('uploads', path.basename(full));
+          let full: string | null = null;
+          // support new API-backed /api/uploads/ paths and legacy /uploads/ paths
+          if (img.startsWith('/api/uploads/')) {
+            const rel = img.replace(/^\/api\/uploads\/?/, '');
+            full = path.join(process.cwd(), 'uploads', rel.replace(/\//g, path.sep));
+          } else if (img.startsWith('/uploads/')) {
+            const rel = img.replace(/^\/?|^\//, '');
+            // legacy: map to project-root uploads (not public)
+            full = path.join(process.cwd(), 'uploads', rel.replace(/\//g, path.sep));
+          }
+          if (full && fs.existsSync(full) && !added.has(full)) {
             zip.addLocalFile(full, 'uploads', path.basename(full));
             added.add(full);
           }

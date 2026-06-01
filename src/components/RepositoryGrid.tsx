@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { normalizeUploadPath } from '@/lib/url';
 import { Search, Eye, Star, Tag, Calendar, X, BookOpen, Layers } from 'lucide-react';
 import RecordForm from './RecordForm';
 
@@ -286,7 +287,7 @@ export default function RepositoryGrid({ initialFilters }: { initialFilters?: { 
                     </p >
                     {activeRecord.content_image && (
                       <div className="mt-3 border rounded-lg overflow-hidden bg-white shadow-2xs">
-                        <img src={activeRecord.content_image} alt="题干截图" className="max-h-64 w-full object-contain mx-auto" />
+                        <img src={normalizeUploadPath(activeRecord.content_image)} alt="题干截图" className="max-h-64 w-full object-contain mx-auto" />
                       </div>
                     )}
                   </div>
@@ -301,7 +302,7 @@ export default function RepositoryGrid({ initialFilters }: { initialFilters?: { 
                     </p >
                     {activeRecord.user_answer_image && (
                       <div className="mt-2 border rounded-lg overflow-hidden bg-white">
-                        <img src={activeRecord.user_answer_image} alt="作答截图" className="max-h-48 w-full object-contain mx-auto" />
+                        <img src={normalizeUploadPath(activeRecord.user_answer_image)} alt="作答截图" className="max-h-48 w-full object-contain mx-auto" />
                       </div>
                     )}
                   </div>
@@ -328,7 +329,7 @@ export default function RepositoryGrid({ initialFilters }: { initialFilters?: { 
                                 </p >
                                 {sol.solution_image && (
                                   <div className="mt-2 border rounded-lg overflow-hidden bg-white">
-                                    <img src={sol.solution_image} alt={`${sol.channel_name} 截图`} className="max-h-56 w-full object-contain mx-auto" />
+                                    <img src={normalizeUploadPath(sol.solution_image)} alt={`${sol.channel_name} 截图`} className="max-h-56 w-full object-contain mx-auto" />
                                   </div>
                                 )}
                           </div>
@@ -349,7 +350,7 @@ export default function RepositoryGrid({ initialFilters }: { initialFilters?: { 
                     </p >
                     {activeRecord.review_image && (
                       <div className="mt-2 border border-amber-100 rounded-lg overflow-hidden bg-white shadow-2xs">
-                        <img src={activeRecord.review_image} alt="复盘切图" className="max-h-56 w-full object-contain mx-auto" />
+                        <img src={normalizeUploadPath(activeRecord.review_image)} alt="复盘切图" className="max-h-56 w-full object-contain mx-auto" />
                       </div>
                     )}
                   </div>

@@ -98,15 +98,15 @@ async function saveDataUrlToFile(dataUrl: string, subfolder = ''): Promise<strin
     const ext = mime.split('/')[1] === 'jpeg' ? 'jpg' : mime.split('/')[1];
     const base64Data = match[3];
 
-    const uploadsDir = path.join(process.cwd(), 'public', 'uploads', subfolder);
+    const uploadsDir = path.join(process.cwd(), 'uploads', subfolder);
     fs.mkdirSync(uploadsDir, { recursive: true });
 
     const fileName = `${randomUUID()}.${ext}`;
     const filePath = path.join(uploadsDir, fileName);
     fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
 
-    // return web-accessible path
-    const webPath = `/uploads/${subfolder ? subfolder + '/' : ''}${fileName}`;
+    // return API-accessible path
+    const webPath = `/api/uploads/${subfolder ? subfolder + '/' : ''}${fileName}`;
     return webPath;
   } catch (err) {
     console.error('saveDataUrlToFile error', err);
