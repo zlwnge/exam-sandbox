@@ -1,6 +1,8 @@
 import { onRecordChange } from '@/lib/serverEventBus';
 
+// This route streams SSE and must always be dynamic/runtime-handled.
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const encoder = new TextEncoder();

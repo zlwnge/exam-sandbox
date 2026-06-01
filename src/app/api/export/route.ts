@@ -1,4 +1,7 @@
 import { NextResponse } from 'next/server';
+// This route reads files from disk and may use request.url; force runtime handling
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 import { db } from '@/lib/db';
 import AdmZip from 'adm-zip';
 import fs from 'fs';
