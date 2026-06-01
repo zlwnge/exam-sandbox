@@ -2,16 +2,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Calendar, Flame, Zap, Award, TrendingUp, ChevronDown } from 'lucide-react';
-
-interface HeatmapStats {
-  totalRecords: number;
-  totalDays: number;
-  peakDay: number;
-}
+import { StatsService } from '@/services/StatsService';
 
 export default function GithubHeatmap() {
   const [heatmapData, setHeatmapData] = useState<Record<string, number>>({});
-  const [stats, setStats] = useState<HeatmapStats>({ totalRecords: 0, totalDays: 0, peakDay: 0 });
+  const [stats, setStats] = useState({ totalRecords: 0, totalDays: 0, peakDay: 0 });
   const [availableYears, setAvailableYears] = useState<number[]>([2026, 2025]);
   const [selectedYear, setSelectedYear] = useState<number>(2026);
   const [loading, setLoading] = useState(true);
@@ -20,22 +15,19 @@ export default function GithubHeatmap() {
   // 核心动力：联动切换年份加载对应全量切片
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/heatmap?year=${selectedYear}`)
-      .then(res => res.json())
+    StatsService.getHeatmap(selectedYear)
       .then(resData => {
-        if (resData.success) {
-          setHeatmapData(resData.data);
-          setStats(resData.stats);
-          if (resData.availableYears && resData.availableYears.length > 0) {
-            setAvailableYears(resData.availableYears);
-            // On first load, auto-select the most recent available year
-            if (initialLoadRef.current) {
-              initialLoadRef.current = false;
-              const maxYear = Math.max(...resData.availableYears);
-              if (maxYear !== selectedYear) {
-                setSelectedYear(maxYear);
-                return; // selectedYear change will trigger a new fetch
-              }
+        setHeatmapData(resData.data);
+        setStats(resData.stats);
+        if (resData.availableYears && resData.availableYears.length > 0) {
+          setAvailableYears(resData.availableYears);
+          // On first load, auto-select the most recent available year
+          if (initialLoadRef.current) {
+            initialLoadRef.current = false;
+            const maxYear = Math.max(...resData.availableYears);
+            if (maxYear !== selectedYear) {
+              setSelectedYear(maxYear);
+              return; // selectedYear change will trigger a new fetch
             }
           }
         }

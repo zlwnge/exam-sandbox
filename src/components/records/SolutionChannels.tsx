@@ -2,13 +2,8 @@
 
 import React, { useCallback } from 'react';
 import { normalizeUploadPath } from '@/lib/url';
+import { SolutionRow } from '@/types/record';
 import { Plus, Trash2 } from 'lucide-react';
-
-export interface SolutionRow {
-  channel_name: string;
-  solution_text: string;
-  solution_image: string | null;
-}
 
 interface SolutionChannelsProps {
   solutions: SolutionRow[];

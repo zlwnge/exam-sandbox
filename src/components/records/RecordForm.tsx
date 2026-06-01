@@ -1,10 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { normalizeUploadPath } from '@/lib/url';
+import { SUBJECTS } from '@/types/subject';
+import { SolutionRow } from '@/types/record';
+import { RecordService } from '@/services/RecordService';
 import { useImagePaste } from '@/hooks/useImagePaste';
-import SolutionChannels, { SolutionRow } from './SolutionChannels';
-import { X } from 'lucide-react';
+import Modal from '@/components/ui/Modal';
+import SolutionChannels from './SolutionChannels';
 
 interface RecordFormProps {
   onRecordAdded?: () => void;
@@ -28,7 +31,7 @@ export default function RecordForm({ onRecordAdded, onRecordUpdated, onClose, re
   const [userAnswerImage, setUserAnswerImage] = useState<string | null>(null);
   const [tags, setTags] = useState('');
   const [importance, setImportance] = useState(3);
-  const [practiceDate, setPracticeDate] = useState('2026-05-28');
+  const [practiceDate, setPracticeDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [reviewNotes, setReviewNotes] = useState('');
   const [reviewImage, setReviewImage] = useState<string | null>(null);
    const [solutions, setSolutions] = useState<SolutionRow[]>([{ channel_name: '粉笔', solution_text: '', solution_image: null }]);
@@ -58,21 +61,11 @@ export default function RecordForm({ onRecordAdded, onRecordUpdated, onClose, re
   // 监听科目变更：实时联动拉取该科目名下的历史常用题型词典
   useEffect(() => {
     if (subject) {
-      fetch(`/api/question-types?subject=${encodeURIComponent(subject)}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) {
-            setHistorySuggestions(data.types);
-          }
-        })
+      RecordService.getQuestionTypes(subject)
+        .then(types => setHistorySuggestions(types))
         .catch(err => console.error('拉取动态题型记忆链失败:', err));
     }
   }, [subject]);
-
-  useEffect(() => {
-    const today = new Date().toISOString().split('T')[0];
-    setPracticeDate(today);
-  }, []);
 
   // Image paste handlers per static target
   const handlePasteContent = useImagePaste(setContentImage);
@@ -139,46 +132,26 @@ export default function RecordForm({ onRecordAdded, onRecordUpdated, onClose, re
     }
 
     // decide create vs update
-    let res;
-    if (record && record.id) {
-      const body = { id: record.id, ...payload };
-      res = await fetch('/api/records', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-    } else {
-      res = await fetch('/api/records', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-    }
-
-    const responseData = await res.json();
-    if (res.ok && responseData.success) {
+    try {
       if (record && record.id) {
+        await RecordService.update(record.id, payload);
         alert('✅ 档案已更新');
         onRecordUpdated && onRecordUpdated();
       } else {
+        await RecordService.create(payload);
         alert('📦 新档案已入库');
         onRecordAdded && onRecordAdded();
       }
       onClose();
-    } else {
-      alert(`❌ 操作失败: ${responseData.error || '服务器返回未知错误'}`);
+    } catch (err: any) {
+      alert(`❌ 操作失败: ${err.message || '服务器返回未知错误'}`);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-xs">
-      <div className="bg-white w-full max-w-4xl max-h-[90vh] overflow-y-auto p-7 rounded-2xl border border-slate-200/80 shadow-2xl space-y-6 text-slate-700 relative animate-fadeIn scrollbar-hide">
-        
-        <button onClick={onClose} type="button" className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-all">
-          <X className="w-5 h-5" />
-        </button>
-
-        <div className="border-b pb-4 pr-10">
+    <Modal open onClose={onClose}>
+      <div className="p-7 space-y-6 text-slate-700">
+        <div className="border-b pb-4">
           <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
             📝 考公题库精细化档案录入
           </h2>
@@ -201,9 +174,7 @@ export default function RecordForm({ onRecordAdded, onRecordUpdated, onClose, re
               <label className="block text-xs font-bold text-slate-600 mb-1.5">所属科目</label>
               <select value={subject} onChange={(e) => setSubject(e.target.value)}
                       className="w-full border border-slate-200 p-2.5 rounded-xl text-xs bg-white outline-none focus:border-blue-500 transition-all" required>
-                <option value="行测">行测</option>
-                <option value="申论">申论</option>
-                <option value="面试">面试</option>
+                {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
 
@@ -317,6 +288,6 @@ export default function RecordForm({ onRecordAdded, onRecordUpdated, onClose, re
           </div>
         </form>
       </div>
-    </div>
+    </Modal>
   );
 }
