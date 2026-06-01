@@ -67,15 +67,19 @@ export default function RepositoryGrid({ initialFilters }: { initialFilters?: { 
       .catch((err) => console.error('读取联动筛选字典失败:', err));
   }, [selectedSubject]);
 
-  // 核心数据检索 — uses separate tag filter distinct from keyword search
-  const fetchRecords = async () => {
+  // 核心数据检索 — accepts optional explicit filters to avoid stale closure issues
+  const fetchRecords = async (explicitFilters?: { search?: string; subject?: string; question_type?: string; tag?: string }) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (search) params.append('search', search);
-      if (selectedSubject) params.append('subject', selectedSubject);
-      if (selectedType) params.append('question_type', selectedType);
-      if (selectedTag) params.append('tag', selectedTag);
+      const s = explicitFilters?.search ?? search;
+      const sub = explicitFilters?.subject ?? selectedSubject;
+      const qt = explicitFilters?.question_type ?? selectedType;
+      const tg = explicitFilters?.tag ?? selectedTag;
+      if (s) params.append('search', s);
+      if (sub) params.append('subject', sub);
+      if (qt) params.append('question_type', qt);
+      if (tg) params.append('tag', tg);
 
       const res = await fetch(`/api/records?${params.toString()}`);
       const data = await res.json();
@@ -92,17 +96,24 @@ export default function RepositoryGrid({ initialFilters }: { initialFilters?: { 
   // Apply initialFilters once on mount / when they change
   useEffect(() => {
     if (initialFilters && Object.keys(initialFilters).length > 0) {
-      autoRunRef.current = false; // reset for new filter set
+      autoRunRef.current = false;
       if (initialFilters.subject) setSelectedSubject(initialFilters.subject);
       if (initialFilters.question_type) {
         desiredTypeRef.current = initialFilters.question_type;
+        setSelectedType(initialFilters.question_type); // set directly for immediate UI feedback
       }
       if (initialFilters.tag) {
         setSelectedTag(initialFilters.tag);
+        setSearch(initialFilters.tag); // 填入搜索框，用户可见
       }
-      // Trigger fetch after a microtick to let state updates flush
-      const timer = setTimeout(() => { fetchRecords(); autoRunRef.current = true; }, 0);
-      return () => clearTimeout(timer);
+      // Use explicit filters to bypass stale state closure — all filter values
+      // are passed directly from initialFilters, not read from React state.
+      fetchRecords({
+        subject: initialFilters.subject || '',
+        question_type: initialFilters.question_type || '',
+        tag: initialFilters.tag || ''
+      });
+      autoRunRef.current = true;
     } else {
       // No filters — reset and show all
       setSearch('');
@@ -132,6 +143,7 @@ export default function RepositoryGrid({ initialFilters }: { initialFilters?: { 
         <div className="relative w-full md:flex-1">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input type="text" placeholder="全局深搜：输入题干关键词、多源考点、标签或心得..." value={search} onChange={(e) => setSearch(e.target.value)}
+                 onKeyDown={(e) => { if (e.key === 'Enter') fetchRecords(); }}
                  className="w-full bg-slate-50/50 pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200/80 outline-none focus:border-blue-500 focus:bg-white transition-all text-slate-700" />
         </div>
 
