@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, fetchRecordsWithSolutions } from '@/lib/db';
 import { emitRecordChange } from '@/lib/serverEventBus';
+import { saveDataUrlToFile } from '@/lib/uploads';
 
 export const dynamic = 'force-dynamic';
-import { randomUUID } from 'crypto'; // 🔥 修复：改为标准的强类型 UUID 发生器导入
-import fs from 'fs';
-import path from 'path';
+import { randomUUID } from 'crypto';
 
 // ---- Types & normalization helpers ----
 interface SolutionPayload {
@@ -88,33 +87,6 @@ function normalizeRecordPayload(input: RecordPayload): NormalizedRecord {
     review_image: input.review_image && typeof input.review_image === 'string' ? input.review_image : null,
     solutions
   };
-}
-
-
-// helper: save data URL (base64) to public/uploads and return web path
-async function saveDataUrlToFile(dataUrl: string, subfolder = ''): Promise<string | null> {
-  try {
-    if (!dataUrl || typeof dataUrl !== 'string') return null;
-    const match = dataUrl.match(/^data:(image\/(png|jpeg|jpg|webp));base64,(.+)$/);
-    if (!match) return null;
-    const mime = match[1];
-    const ext = mime.split('/')[1] === 'jpeg' ? 'jpg' : mime.split('/')[1];
-    const base64Data = match[3];
-
-    const uploadsDir = path.join(process.cwd(), 'uploads', subfolder);
-    fs.mkdirSync(uploadsDir, { recursive: true });
-
-    const fileName = `${randomUUID()}.${ext}`;
-    const filePath = path.join(uploadsDir, fileName);
-    fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
-
-    // return API-accessible path
-    const webPath = `/api/uploads/${subfolder ? subfolder + '/' : ''}${fileName}`;
-    return webPath;
-  } catch (err) {
-    console.error('saveDataUrlToFile error', err);
-    return null;
-  }
 }
 
 export async function POST(request: Request) {
@@ -200,56 +172,13 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const search = searchParams.get('search') || '';
-    const subject = searchParams.get('subject') || '';
-    const qType = searchParams.get('question_type') || '';
-
-    let query = `
-      SELECT r.*, s.id as s_id, s.channel_name, s.solution_text, s.solution_image
-      FROM study_records r
-      LEFT JOIN channel_solutions s ON r.id = s.record_id
-      WHERE 1=1
-    `;
-    const params: any[] = [];
-
-    if (search) {
-      query += ` AND (r.content_text LIKE ? OR r.source LIKE ? OR r.tags LIKE ? OR r.review_notes LIKE ?)`;
-      const wildcard = `%${search}%`;
-      params.push(wildcard, wildcard, wildcard, wildcard);
-    }
-    if (subject) {
-      query += ` AND r.subject = ?`;
-      params.push(subject);
-    }
-    if (qType) {
-      query += ` AND r.question_type = ?`;
-      params.push(qType);
-    }
-    const tag = searchParams.get('tag') || '';
-    if (tag) {
-      query += ` AND r.tags LIKE ?`;
-      params.push(`%${tag}%`);
-    }
-
-    query += ` ORDER BY r.practice_date DESC, r.created_at DESC`;
-    const rows = db.prepare(query).all(...params) as any[];
-
-    const recordsMap: Record<string, any> = {};
-    for (const row of rows) {
-      if (!recordsMap[row.id]) {
-        recordsMap[row.id] = { ...row, solutions: [] };
-      }
-      if (row.s_id) {
-        recordsMap[row.id].solutions.push({
-          id: row.s_id,
-          channel_name: row.channel_name,
-          solution_text: row.solution_text,
-          solution_image: row.solution_image || null
-        });
-      }
-    }
-
-    return NextResponse.json({ success: true, records: Object.values(recordsMap) });
+    const records = fetchRecordsWithSolutions({
+      search: searchParams.get('search') || '',
+      subject: searchParams.get('subject') || '',
+      question_type: searchParams.get('question_type') || '',
+      tag: searchParams.get('tag') || ''
+    });
+    return NextResponse.json({ success: true, records });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }

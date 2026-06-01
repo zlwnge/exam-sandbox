@@ -1,32 +1,43 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { saveDataUrlToFile } from '@/lib/uploads';
 import { randomUUID } from 'crypto';
-import fs from 'fs';
-import path from 'path';
 
-// Reuse saveDataUrlToFile from records route by reimplementing minimal logic here
-async function saveDataUrlToFile(dataUrl: string, subfolder = ''): Promise<string | null> {
-  try {
-    if (!dataUrl || typeof dataUrl !== 'string') return null;
-    const match = dataUrl.match(/^data:(image\/(png|jpeg|jpg|webp));base64,(.+)$/);
-    if (!match) return null;
-    const mime = match[1];
-    const ext = mime.split('/')[1] === 'jpeg' ? 'jpg' : mime.split('/')[1];
-    const base64Data = match[3];
-
-    const uploadsDir = path.join(process.cwd(), 'uploads', subfolder);
-    fs.mkdirSync(uploadsDir, { recursive: true });
-
-    const fileName = `${randomUUID()}.${ext}`;
-    const filePath = path.join(uploadsDir, fileName);
-    fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
-
-    const webPath = `/api/uploads/${subfolder ? subfolder + '/' : ''}${fileName}`;
-    return webPath;
-  } catch (err) {
-    console.error('saveDataUrlToFile error', err);
-    return null;
+/**
+ * Parse a single CSV line into fields, respecting double-quote escaping.
+ * Handles commas and newlines inside quoted fields.
+ */
+function parseCSVLine(line: string): string[] {
+  const fields: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (i + 1 < line.length && line[i + 1] === '"') {
+          // escaped quote inside field
+          current += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        current += ch;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ',') {
+        fields.push(current.trim());
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
   }
+  fields.push(current.trim());
+  return fields;
 }
 
 export async function POST(request: Request) {
@@ -108,17 +119,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, inserted, skipped });
     }
 
-    // CSV import (simple) - read text
+    // CSV import — with proper quoted-field handling
     if (ct.includes('text/csv') || ct.includes('application/csv')) {
       const text = await request.text();
       const lines = text.split(/\r?\n/).filter(Boolean);
-      const header = lines.shift()?.split(',').map(h => h.trim()) || [];
+      const header = parseCSVLine(lines.shift() || '').map(h => h.trim());
       const records: any[] = [];
       for (const ln of lines) {
-        // naive CSV split - assumes no commas inside quoted fields
-        const cols = ln.split(',');
+        const cols = parseCSVLine(ln);
         const obj: any = {};
-        header.forEach((h, i) => obj[h] = cols[i] ? cols[i].replace(/^"|"$/g,'') : '');
+        header.forEach((h, i) => obj[h] = (cols[i] ?? ''));
         // parse solutions_json if present
         if (obj['solutions_json']) {
           try { obj.solutions = JSON.parse(obj['solutions_json']); } catch(e) { obj.solutions = []; }

@@ -2,33 +2,16 @@ import { NextResponse } from 'next/server';
 // This route reads files from disk and may use request.url; force runtime handling
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-import { db } from '@/lib/db';
+import { fetchRecordsWithSolutions } from '@/lib/db';
 import AdmZip from 'adm-zip';
 import fs from 'fs';
 import path from 'path';
 
-function fetchAllRecords(filters: any = {}) {
-  // basic filter support: subject, question_type, tag
-  const params: any[] = [];
-  let where = 'WHERE 1=1';
-  if (filters.subject) { where += ' AND r.subject = ?'; params.push(filters.subject); }
-  if (filters.question_type) { where += ' AND r.question_type = ?'; params.push(filters.question_type); }
-  if (filters.tag) { where += ' AND r.tags LIKE ?'; params.push(`%${filters.tag}%`); }
-
-  const rows = db.prepare(`
-    SELECT r.*, s.id as s_id, s.channel_name, s.solution_text, s.solution_image
-    FROM study_records r
-    LEFT JOIN channel_solutions s ON r.id = s.record_id
-    ${where}
-    ORDER BY r.practice_date DESC, r.created_at DESC
-  `).all(...params) as any[];
-
-  const map: Record<string, any> = {};
-  for (const row of rows) {
-    if (!map[row.id]) map[row.id] = { ...row, solutions: [] };
-    if (row.s_id) map[row.id].solutions.push({ id: row.s_id, channel_name: row.channel_name, solution_text: row.solution_text, solution_image: row.solution_image || null });
-  }
-  return Object.values(map);
+/** Escape a value for CSV: wrap in quotes, escape internal quotes and newlines. */
+function csvEscape(val: string): string {
+  // Replace newlines with space to keep CSV rows intact
+  const safe = val.replace(/\r?\n/g, ' ').replace(/"/g, '""');
+  return `"${safe}"`;
 }
 
 function toCSV(records: any[]) {
@@ -37,19 +20,19 @@ function toCSV(records: any[]) {
   for (const r of records) {
     const row = [
       r.id,
-      `"${(r.source||'').replace(/"/g,'""')}"`,
-      `"${(r.subject||'').replace(/"/g,'""')}"`,
-      `"${(r.question_type||'').replace(/"/g,'""')}"`,
-      `"${(r.content_text||'').replace(/"/g,'""')}"`,
+      csvEscape(r.source || ''),
+      csvEscape(r.subject || ''),
+      csvEscape(r.question_type || ''),
+      csvEscape(r.content_text || ''),
       r.content_image || '',
-      `"${(r.user_answer||'').replace(/"/g,'""')}"`,
+      csvEscape(r.user_answer || ''),
       r.user_answer_image || '',
-      `"${(r.tags||'').replace(/"/g,'""')}"`,
+      csvEscape(r.tags || ''),
       r.importance || '',
       r.practice_date || '',
-      `"${(r.review_notes||'').replace(/"/g,'""')}"`,
+      csvEscape(r.review_notes || ''),
       r.review_image || '',
-      `"${JSON.stringify(r.solutions || []).replace(/"/g,'""')}"`
+      csvEscape(JSON.stringify(r.solutions || []))
     ];
     lines.push(row.join(','));
   }
@@ -64,7 +47,7 @@ export async function GET(request: Request) {
     const question_type = url.searchParams.get('question_type') || '';
     const tag = url.searchParams.get('tag') || '';
 
-    const records = fetchAllRecords({ subject, question_type, tag });
+    const records = fetchRecordsWithSolutions({ subject, question_type, tag });
 
     if (format === 'csv') {
       const csv = toCSV(records);

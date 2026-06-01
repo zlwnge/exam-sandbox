@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { normalizeUploadPath } from '@/lib/url';
-import { Plus, Trash2, X } from 'lucide-react';
+import { useImagePaste } from '@/hooks/useImagePaste';
+import SolutionChannels, { SolutionRow } from './SolutionChannels';
+import { X } from 'lucide-react';
 
 interface RecordFormProps {
   onRecordAdded?: () => void;
@@ -29,7 +31,7 @@ export default function RecordForm({ onRecordAdded, onRecordUpdated, onClose, re
   const [practiceDate, setPracticeDate] = useState('2026-05-28');
   const [reviewNotes, setReviewNotes] = useState('');
   const [reviewImage, setReviewImage] = useState<string | null>(null);
-   const [solutions, setSolutions] = useState([{ channel_name: '粉笔', solution_text: '', solution_image: null as string | null }]); 
+   const [solutions, setSolutions] = useState<SolutionRow[]>([{ channel_name: '粉笔', solution_text: '', solution_image: null }]);
    const [errors, setErrors] = useState<{ [key: string]: any }>({});
 
   // populate form when editing an existing record
@@ -72,49 +74,10 @@ export default function RecordForm({ onRecordAdded, onRecordUpdated, onClose, re
     setPracticeDate(today);
   }, []);
 
-  const handlePasteCapture = (e: React.ClipboardEvent, target: 'content' | 'review' | 'userAnswer' | 'solution', solIndex?: number) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.indexOf('image') !== -1) {
-        e.preventDefault();
-        const file = items[i].getAsFile();
-        if (file) {
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            if (event.target?.result) {
-              const dataUrl = event.target.result as string;
-              if (target === 'content') setContentImage(dataUrl);
-              if (target === 'review') setReviewImage(dataUrl);
-              if (target === 'userAnswer') setUserAnswerImage(dataUrl);
-              if (target === 'solution' && typeof solIndex === 'number') {
-                const updated = [...solutions];
-                updated[solIndex] = { ...updated[solIndex], solution_image: dataUrl };
-                setSolutions(updated);
-              }
-            }
-          };
-          reader.readAsDataURL(file);
-        }
-      }
-    }
-  };
-
-  const addChannelRow = () => {
-    setSolutions([...solutions, { channel_name: '', solution_text: '', solution_image: null }]);
-  };
-
-  const removeChannelRow = (index: number) => {
-    const updated = [...solutions];
-    updated.splice(index, 1);
-    setSolutions(updated);
-  };
-
-  const handleChannelChange = (index: number, field: 'channel_name' | 'solution_text', value: string) => {
-    const updated = [...solutions];
-    updated[index][field] = value;
-    setSolutions(updated);
-  };
+  // Image paste handlers per static target
+  const handlePasteContent = useImagePaste(setContentImage);
+  const handlePasteReview = useImagePaste(setReviewImage);
+  const handlePasteUserAnswer = useImagePaste(setUserAnswerImage);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -269,7 +232,7 @@ export default function RecordForm({ onRecordAdded, onRecordUpdated, onClose, re
               <span className="text-blue-500 font-normal text-[11px]">可在下方区域直接用 Ctrl+V 粘贴错题截图</span>
             </div>
             <div className="relative">
-              <textarea onPaste={(e) => handlePasteCapture(e, 'content')}
+              <textarea onPaste={handlePasteContent}
                         placeholder="请输入题目文本内容，支持长材料，也可直接粘贴屏幕截图文件..."
                         value={contentText} onChange={(e) => setContentText(e.target.value)} rows={4}
                         className="w-full text-xs outline-none resize-none leading-relaxed text-slate-600" />
@@ -288,7 +251,7 @@ export default function RecordForm({ onRecordAdded, onRecordUpdated, onClose, re
             <div className="text-xs font-bold text-red-600 flex items-center gap-1">
               ❌ 你的作答记录内容
             </div>
-            <textarea onPaste={(e) => handlePasteCapture(e, 'userAnswer')}
+            <textarea onPaste={handlePasteUserAnswer}
                       placeholder="输入你当时的作答选项或申论草稿推演大段文字，或直接粘贴截图..."
                       value={userAnswer} onChange={(e) => setUserAnswer(e.target.value)} rows={3}
                       className="w-full text-xs bg-transparent outline-none resize-none leading-relaxed text-slate-600" />
@@ -302,48 +265,7 @@ export default function RecordForm({ onRecordAdded, onRecordUpdated, onClose, re
           </div>
 
           {/* 第四行：多渠道对照 */}
-          <div className="border border-blue-100 bg-blue-50/5 rounded-2xl p-4 space-y-3">
-            <div className="flex justify-between items-center">
-              <div className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                🔎 各渠道参考答案解析对照库
-              </div>
-              <button type="button" onClick={addChannelRow} className="bg-slate-900 text-white text-[10px] px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 hover:bg-slate-800 transition-all">
-                <Plus className="w-3 h-3" /> 增加渠道
-              </button>
-            </div>
-            <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-              {solutions.map((sol, idx) => (
-                <div key={idx} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-start border-b border-slate-100 pb-2">
-                  <div className="md:col-span-3">
-                    <textarea onPaste={(e) => handlePasteCapture(e, 'solution', idx)}
-                              placeholder="参考答案 或 核心解题思路，支持粘贴截图"
-                              value={sol.solution_text} onChange={(e) => handleChannelChange(idx, 'solution_text', e.target.value)}
-                              className="w-full border-b border-slate-200 py-1.5 text-xs outline-none bg-transparent focus:border-blue-500 resize-none" rows={2} />
-                    {errors.solutions && errors.solutions[idx] && <div className="text-red-500 text-xs mt-1">{errors.solutions[idx]}</div>}
-                    {sol.solution_image && (
-                      <div className="mt-2 relative inline-block border rounded-lg overflow-hidden bg-slate-50">
-                        <img src={normalizeUploadPath(sol.solution_image)} alt={`渠道${idx}截图`} className="max-h-24 object-contain" />
-                        <button type="button" onClick={() => {
-                          const updated = [...solutions];
-                          updated[idx] = { ...updated[idx], solution_image: null };
-                          setSolutions(updated);
-                        }} className="absolute top-0 right-0 bg-red-500 text-white text-[9px] px-1 rounded-bl">移除</button>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <input type="text" placeholder="渠道来源(如:粉笔)" value={sol.channel_name} onChange={(e) => handleChannelChange(idx, 'channel_name', e.target.value)}
-                           className="w-full border border-slate-200 p-1.5 rounded-lg text-xs outline-none bg-white text-center focus:border-blue-500" required />
-                    {solutions.length > 1 && (
-                      <button type="button" onClick={() => removeChannelRow(idx)} className="text-red-400 hover:text-red-600 p-1">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <SolutionChannels solutions={solutions} onChange={setSolutions} errors={errors.solutions} />
 
           {/* 第五行：属性快照 */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border border-slate-100 p-4 rounded-2xl bg-slate-50/40">
@@ -371,7 +293,7 @@ export default function RecordForm({ onRecordAdded, onRecordUpdated, onClose, re
               <span className="text-[11px] font-normal text-amber-600">同样支持直接在这个框 Ctrl+V 粘贴脑图或公式截图</span>
             </div>
             <div className="relative">
-              <textarea onPaste={(e) => handlePasteCapture(e, 'review')}
+              <textarea onPaste={handlePasteReview}
                         placeholder="记录解题思维导图、公式秒杀技巧、踩坑归纳或高级申论全句范文..."
                         value={reviewNotes} onChange={(e) => setReviewNotes(e.target.value)} rows={4}
                         className={`w-full text-xs bg-transparent outline-none resize-none leading-relaxed text-slate-600 focus:ring-0 ${errors.review ? 'border border-red-300 bg-red-50' : ''}`} />

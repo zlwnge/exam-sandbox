@@ -66,3 +66,66 @@ try {
 } catch (err) {
   console.warn('DB index creation warning:', err);
 }
+
+// ---- Shared query: fetch records with their channel_solutions joined ----
+
+export interface RecordsFilter {
+  search?: string;
+  subject?: string;
+  question_type?: string;
+  tag?: string;
+}
+
+/**
+ * Fetch study_records with their channel_solutions aggregated as an array.
+ * All filter fields are optional; when empty, returns all records.
+ */
+export function fetchRecordsWithSolutions(filter: RecordsFilter = {}) {
+  let sql = `
+    SELECT r.*, s.id as s_id, s.channel_name, s.solution_text, s.solution_image
+    FROM study_records r
+    LEFT JOIN channel_solutions s ON r.id = s.record_id
+    WHERE 1=1
+  `;
+  const params: any[] = [];
+
+  if (filter.search) {
+    sql += ` AND (r.content_text LIKE ? OR r.source LIKE ? OR r.tags LIKE ? OR r.review_notes LIKE ?)`;
+    const wildcard = `%${filter.search}%`;
+    params.push(wildcard, wildcard, wildcard, wildcard);
+  }
+  if (filter.subject) {
+    sql += ` AND r.subject = ?`;
+    params.push(filter.subject);
+  }
+  if (filter.question_type) {
+    sql += ` AND r.question_type = ?`;
+    params.push(filter.question_type);
+  }
+  if (filter.tag) {
+    sql += ` AND r.tags LIKE ?`;
+    params.push(`%${filter.tag}%`);
+  }
+
+  sql += ` ORDER BY r.practice_date DESC, r.created_at DESC`;
+
+  const rows = db.prepare(sql).all(...params) as any[];
+
+  // Aggregate solutions into array per record
+  const recordsMap: Record<string, any> = {};
+  for (const row of rows) {
+    if (!recordsMap[row.id]) {
+      recordsMap[row.id] = { ...row, solutions: [] };
+    }
+    if (row.s_id) {
+      recordsMap[row.id].solutions.push({
+        id: row.s_id,
+        channel_name: row.channel_name,
+        solution_text: row.solution_text,
+        solution_image: row.solution_image || null
+      });
+    }
+  }
+
+  return Object.values(recordsMap);
+}

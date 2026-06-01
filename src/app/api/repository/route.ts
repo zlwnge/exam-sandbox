@@ -1,104 +1,80 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { z } from 'zod';
+import { db, fetchRecordsWithSolutions } from '@/lib/db';
 import { randomUUID } from 'crypto';
 
-// 使用 Zod .strict() 强行在协议层抹杀一切“结果论（对错、分数）”字段的侵入
-const recordSchema = z.object({
-  category: z.enum(['行测', '申论', '面试']),
-  knowledge_path: z.string().min(1),
-  content_text: z.string().min(1),
-  image_url: z.string().optional().nullable(),
-  my_thinking_path: z.string().optional(),
-  core_eye: z.string().optional(),
-  mastery_level: z.enum(['未知', '存在盲区', '路径冗长', '完美掌握']),
-  duration: z.number().nonnegative().default(0),
-  breakdowns: z.array(z.object({
-    source_name: z.string().min(1),
-    steps: z.string().min(1)
-  })).min(1)
-}).strict();
+export const dynamic = 'force-dynamic';
 
-// P0: 核心录入控制流 (带 ACID 级联事务)
+// POST: 录入新题目记录（使用实际的 study_records + channel_solutions schema）
 export async function POST(request: Request) {
   try {
     const json = await request.json();
-    const parsedData = recordSchema.parse(json);
+    const {
+      source = '',
+      subject = '',
+      question_type = '',
+      content_text = '',
+      content_image = null,
+      user_answer = '',
+      user_answer_image = null,
+      tags = '',
+      importance = 3,
+      practice_date = new Date().toISOString().split('T')[0],
+      review_notes = '',
+      review_image = null,
+      solutions = []
+    } = json;
 
-    // 默认本地沙箱多租户隔离用户 ID
-    const userId = 'local_admin_2026'; 
-
-    const insertRecord = db.prepare(`
-      INSERT INTO study_records (id, user_id, category, knowledge_path, content_text, image_url, my_thinking_path, core_eye, mastery_level, duration)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    const insertBreakdown = db.prepare(`
-      INSERT INTO methodology_breakdowns (id, record_id, source_name, steps) VALUES (?, ?, ?, ?)
-    `);
+    if (!source || !subject || !question_type || (!content_text && !content_image)) {
+      return NextResponse.json({ success: false, error: '必填基础档案元数据不完整' }, { status: 400 });
+    }
 
     const recordId = randomUUID();
 
-    // 严格启用 better-sqlite3 事务保护机制，子表失败则全盘回滚
-    const runTransaction = db.transaction((data) => {
-      insertRecord.run(
-        recordId, userId, data.category, data.knowledge_path, data.content_text,
-        data.image_url, data.my_thinking_path, data.core_eye, data.mastery_level, data.duration
-      );
+    const insertRecord = db.prepare(`
+      INSERT INTO study_records (id, source, subject, question_type, content_text, content_image, user_answer, user_answer_image, tags, importance, practice_date, review_notes, review_image)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const insertSolution = db.prepare(`
+      INSERT INTO channel_solutions (id, record_id, channel_name, solution_text, solution_image)
+      VALUES (?, ?, ?, ?, ?)
+    `);
 
-      for (const b of data.breakdowns) {
-        insertBreakdown.run(randomUUID(), recordId, b.source_name, b.steps);
+    const runTx = db.transaction(() => {
+      insertRecord.run(recordId, source, subject, question_type, content_text, content_image,
+        user_answer, user_answer_image, tags, Number(importance), practice_date, review_notes, review_image);
+
+      if (Array.isArray(solutions)) {
+        for (const sol of solutions) {
+          const txt = (sol.solution_text || '').toString().trim();
+          const hasImage = !!sol.solution_image;
+          if (txt || hasImage) {
+            insertSolution.run(randomUUID(), recordId,
+              sol.channel_name || '未命名渠道',
+              sol.solution_text || '',
+              sol.solution_image || null);
+          }
+        }
       }
     });
 
-    runTransaction(parsedData);
+    runTx();
     return NextResponse.json({ success: true, recordId }, { status: 201 });
-
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 400 });
   }
 }
 
-// P1: 多维条件级联防抖检索接口
+// GET: 多维条件检索（复用共享查询函数）
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const search = searchParams.get('search') || '';
-    const mastery = searchParams.get('mastery_level') || '';
-
-    let sql = `
-      SELECT r.*, b.id as b_id, b.source_name, b.steps 
-      FROM study_records r
-      LEFT JOIN methodology_breakdowns b ON r.id = b.record_id
-      WHERE 1=1
-    `;
-    const params: any[] = [];
-
-    if (search) {
-      sql += ` AND (r.content_text LIKE ? OR r.knowledge_path LIKE ? OR r.core_eye LIKE ?)`;
-      const term = `%${search}%`;
-      params.push(term, term, term);
-    }
-    if (mastery) {
-      sql += ` AND r.mastery_level = ?`;
-      params.push(mastery);
-    }
-    sql += ` ORDER BY r.created_at DESC`;
-
-    const rows = db.prepare(sql).all(...params) as any[];
-    
-    // 聚合内存数据结构优化输出
-    const results: Record<string, any> = {};
-    for (const row of rows) {
-      if (!results[row.id]) {
-        results[row.id] = { ...row, breakdowns: [] };
-      }
-      if (row.b_id) {
-        results[row.id].breakdowns.push({ id: row.b_id, source_name: row.source_name, steps: row.steps });
-      }
-    }
-
-    return NextResponse.json({ success: true, records: Object.values(results) });
+    const records = fetchRecordsWithSolutions({
+      search: searchParams.get('search') || '',
+      subject: searchParams.get('subject') || '',
+      question_type: searchParams.get('question_type') || '',
+      tag: searchParams.get('tag') || ''
+    });
+    return NextResponse.json({ success: true, records });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }

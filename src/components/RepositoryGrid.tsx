@@ -38,13 +38,15 @@ export default function RepositoryGrid({ initialFilters }: { initialFilters?: { 
   const [search, setSearch] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedType, setSelectedType] = useState('');
+  const [selectedTag, setSelectedTag] = useState('');
   const [dynamicTypes, setDynamicTypes] = useState<string[]>([]);
 
   // 查看详情弹窗控制
   const [activeRecord, setActiveRecord] = useState<StudyRecord | null>(null);
   const [showEditForm, setShowEditForm] = useState(false);
 
-  // ref used to hold desired question_type until types list loads
+  // Track auto-run state with a ref (avoids fragile multi-useEffect cascade)
+  const autoRunRef = React.useRef(false);
   const desiredTypeRef = React.useRef<string | null>(null);
 
   // 联动管道：监听科目变更，实时更新题型选单字典
@@ -54,8 +56,6 @@ export default function RepositoryGrid({ initialFilters }: { initialFilters?: { 
       .then((data) => {
         if (data.success) {
           setDynamicTypes(data.types);
-          // If there's a pending desired type (from initialFilters), apply it only when types are loaded
-          // otherwise keep current selection (do not auto-clear to preserve user intent)
           if (desiredTypeRef.current) {
             if (data.types.includes(desiredTypeRef.current)) {
               setSelectedType(desiredTypeRef.current);
@@ -67,7 +67,7 @@ export default function RepositoryGrid({ initialFilters }: { initialFilters?: { 
       .catch((err) => console.error('读取联动筛选字典失败:', err));
   }, [selectedSubject]);
 
-  // 核心数据检索 - only run when user clicks 查询
+  // 核心数据检索 — uses separate tag filter distinct from keyword search
   const fetchRecords = async () => {
     setLoading(true);
     try {
@@ -75,6 +75,7 @@ export default function RepositoryGrid({ initialFilters }: { initialFilters?: { 
       if (search) params.append('search', search);
       if (selectedSubject) params.append('subject', selectedSubject);
       if (selectedType) params.append('question_type', selectedType);
+      if (selectedTag) params.append('tag', selectedTag);
 
       const res = await fetch(`/api/records?${params.toString()}`);
       const data = await res.json();
@@ -88,48 +89,27 @@ export default function RepositoryGrid({ initialFilters }: { initialFilters?: { 
     }
   };
 
-  // If initial filters arrive, apply them. For question_type we may need to wait until dynamicTypes are loaded.
+  // Apply initialFilters once on mount / when they change
   useEffect(() => {
     if (initialFilters && Object.keys(initialFilters).length > 0) {
+      autoRunRef.current = false; // reset for new filter set
       if (initialFilters.subject) setSelectedSubject(initialFilters.subject);
       if (initialFilters.question_type) {
-        // store desired type to apply when types list is available
         desiredTypeRef.current = initialFilters.question_type;
       }
-      if (initialFilters.tag) setSearch(initialFilters.tag);
-    }
-  }, [initialFilters]);
-
-  // auto-run when navigation requested autoRun and types are ready
-  const [autoRunDone, setAutoRunDone] = useState(false);
-  useEffect(() => {
-    if (initialFilters && initialFilters.autoRun && !autoRunDone) {
-      // if a question_type was requested, wait until dynamicTypes includes it (or types loaded)
-      const requestedType = initialFilters.question_type;
-      if (requestedType) {
-        if (dynamicTypes.length === 0) return; // wait for types to load
-        // apply even if not found (fallback)
-        fetchRecords();
-        setAutoRunDone(true);
-      } else {
-        // no specific type, run immediately
-        fetchRecords();
-        setAutoRunDone(true);
+      if (initialFilters.tag) {
+        setSelectedTag(initialFilters.tag);
       }
-    }
-  }, [dynamicTypes, initialFilters, autoRunDone]);
-
-  // When navigated to repository without presets (来自其他页面)，展示全量：
-  // 清空搜索框与筛选，自动查询全部记录。
-  useEffect(() => {
-    if (initialFilters == null) {
-      // reset UI controls
+      // Trigger fetch after a microtick to let state updates flush
+      const timer = setTimeout(() => { fetchRecords(); autoRunRef.current = true; }, 0);
+      return () => clearTimeout(timer);
+    } else {
+      // No filters — reset and show all
       setSearch('');
       setSelectedSubject('');
       setSelectedType('');
-      // reset autoRun marker so future navigations still work
-      setAutoRunDone(false);
-      // fetch all records (no filters)
+      setSelectedTag('');
+      autoRunRef.current = false;
       fetchRecords();
     }
   }, [initialFilters]);

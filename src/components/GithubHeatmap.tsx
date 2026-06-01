@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Calendar, Flame, Zap, Award, TrendingUp, ChevronDown } from 'lucide-react';
 
 interface HeatmapStats {
@@ -13,9 +13,9 @@ export default function GithubHeatmap() {
   const [heatmapData, setHeatmapData] = useState<Record<string, number>>({});
   const [stats, setStats] = useState<HeatmapStats>({ totalRecords: 0, totalDays: 0, peakDay: 0 });
   const [availableYears, setAvailableYears] = useState<number[]>([2026, 2025]);
-  // 响应式默认年份锁定 2026
   const [selectedYear, setSelectedYear] = useState<number>(2026);
   const [loading, setLoading] = useState(true);
+  const initialLoadRef = useRef(true);
 
   // 核心动力：联动切换年份加载对应全量切片
   useEffect(() => {
@@ -28,6 +28,15 @@ export default function GithubHeatmap() {
           setStats(resData.stats);
           if (resData.availableYears && resData.availableYears.length > 0) {
             setAvailableYears(resData.availableYears);
+            // On first load, auto-select the most recent available year
+            if (initialLoadRef.current) {
+              initialLoadRef.current = false;
+              const maxYear = Math.max(...resData.availableYears);
+              if (maxYear !== selectedYear) {
+                setSelectedYear(maxYear);
+                return; // selectedYear change will trigger a new fetch
+              }
+            }
           }
         }
       })

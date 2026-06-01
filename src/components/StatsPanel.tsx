@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { ChevronRight, ChevronDown, Sliders } from 'lucide-react';
 
 type KnowledgeRow = { tag: string; cnt: number };
@@ -12,6 +12,20 @@ export default function StatsPanel({ onNavigate }: { onNavigate: (f: { subject?:
   const [hierarchy, setHierarchy] = useState<SubjectRow[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [expandedType, setExpandedType] = useState<string | null>(null);
+  const selectedSubjectRef = useRef(selectedSubject);
+  selectedSubjectRef.current = selectedSubject;
+
+  // Apply hierarchy data and ensure selectedSubject is still valid
+  const applyHierarchy = useCallback((newHierarchy: SubjectRow[], isInitialLoad: boolean) => {
+    setHierarchy(newHierarchy);
+    if (newHierarchy.length > 0) {
+      const currentSubject = selectedSubjectRef.current;
+      const exists = newHierarchy.some(s => s.subject === currentSubject);
+      if (!exists || isInitialLoad) {
+        setSelectedSubject(newHierarchy[0].subject);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -21,10 +35,7 @@ export default function StatsPanel({ onNavigate }: { onNavigate: (f: { subject?:
       .then(data => {
         if (!mounted) return;
         if (data.success) {
-          setHierarchy(data.hierarchy || []);
-          if (data.hierarchy && data.hierarchy.length > 0) {
-            setSelectedSubject(data.hierarchy[0].subject);
-          }
+          applyHierarchy(data.hierarchy || [], true);
         }
       })
       .catch((err) => { console.error('[StatsPanel] Initial fetch failed:', err); })
@@ -44,10 +55,7 @@ export default function StatsPanel({ onNavigate }: { onNavigate: (f: { subject?:
         fetch('/api/stats').then(res => res.json()).then(data => {
           if (!mounted) return;
           if (data.success) {
-            setHierarchy(data.hierarchy || []);
-            if (data.hierarchy && data.hierarchy.length > 0 && !selectedSubject) {
-              setSelectedSubject(data.hierarchy[0].subject);
-            }
+            applyHierarchy(data.hierarchy || [], false);
           }
         }).catch((err) => { console.error('[StatsPanel] SSE refresh fetch failed:', err); });
       };
@@ -64,10 +72,7 @@ export default function StatsPanel({ onNavigate }: { onNavigate: (f: { subject?:
             fetch('/api/stats').then(res => res.json()).then(data => {
               if (!mounted) return;
               if (data.success) {
-                setHierarchy(data.hierarchy || []);
-                if (data.hierarchy && data.hierarchy.length > 0 && !selectedSubject) {
-                  setSelectedSubject(data.hierarchy[0].subject);
-                }
+                applyHierarchy(data.hierarchy || [], false);
               }
             }).catch((err) => { console.error('[StatsPanel] Poll fetch failed:', err); });
           }, 30000);
