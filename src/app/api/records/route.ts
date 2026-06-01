@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { emitRecordChange } from '@/lib/serverEventBus';
 import { randomUUID } from 'crypto'; // 🔥 修复：改为标准的强类型 UUID 发生器导入
 import fs from 'fs';
 import path from 'path';
@@ -184,6 +185,9 @@ export async function POST(request: Request) {
 
     runTx(recordId, { source, subject, question_type, content_text, content_image, user_answer, user_answer_image, tags, importance, practice_date, review_notes, review_image, solutions });
 
+    // 通知同实例 SSE 客户端及页面订阅
+    try { emitRecordChange({ action: 'created', id: recordId }); } catch (e) { console.error('emit record created err', e); }
+
     return NextResponse.json({ success: true, recordId }, { status: 201 });
   } catch (error: any) {
     console.error('🔥 物理层级联写入事务崩溃，原因:', error.message); // 打印到本地终端
@@ -327,6 +331,8 @@ export async function PUT(request: Request) {
 
     runTx(id, { source, subject, question_type, content_text, content_image, user_answer, user_answer_image, tags, importance, practice_date, review_notes, review_image, solutions });
 
+    try { emitRecordChange({ action: 'updated', id }); } catch (e) { console.error('emit record updated err', e); }
+
     return NextResponse.json({ success: true, id }, { status: 200 });
   } catch (err: any) {
     console.error('PUT /api/records error', err);
@@ -353,6 +359,7 @@ export async function DELETE(request: Request) {
     const info = del.run(id);
 
     if (info.changes && info.changes > 0) {
+      try { emitRecordChange({ action: 'deleted', id }); } catch (e) { console.error('emit record deleted err', e); }
       return NextResponse.json({ success: true, id });
     } else {
       return NextResponse.json({ success: false, error: '未找到该记录' }, { status: 404 });

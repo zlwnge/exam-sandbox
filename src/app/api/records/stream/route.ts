@@ -1,0 +1,48 @@
+import { onRecordChange } from '@/lib/serverEventBus';
+
+export const runtime = 'nodejs';
+
+export async function GET() {
+  const encoder = new TextEncoder();
+
+  let cleanup: (() => void) | null = null;
+
+  const stream = new ReadableStream({
+    start(controller) {
+      // keep-alive newline every ~15s to prevent proxies closing the connection
+      const keepAlive = setInterval(() => controller.enqueue(encoder.encode(':keepalive\n\n')) , 15000);
+
+      const onEvent = (msg: string) => {
+        try {
+          controller.enqueue(encoder.encode(`data: ${msg}\n\n`));
+        } catch (e) {
+          // ignore
+        }
+      };
+
+      // register listener
+      const off = onRecordChange(onEvent);
+
+      cleanup = () => {
+        clearInterval(keepAlive);
+        off();
+        try { controller.close(); } catch (e) {}
+      };
+
+      // initial connected message
+      controller.enqueue(encoder.encode('data: connected\n\n'));
+    },
+    cancel() {
+      if (cleanup) cleanup();
+    }
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive'
+    }
+  });
+}

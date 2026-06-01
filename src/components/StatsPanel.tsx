@@ -29,7 +29,30 @@ export default function StatsPanel({ onNavigate }: { onNavigate: (f: { subject?:
       })
       .catch(() => {})
       .finally(() => mounted && setLoading(false));
-    return () => { mounted = false };
+    // SSE subscription for cross-client updates
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource('/api/records/stream');
+      es.onmessage = () => {
+        // refresh stats on any record event
+        fetch('/api/stats').then(res => res.json()).then(data => {
+          if (!mounted) return;
+          if (data.success) {
+            setHierarchy(data.hierarchy || []);
+            if (data.hierarchy && data.hierarchy.length > 0 && !selectedSubject) {
+              setSelectedSubject(data.hierarchy[0].subject);
+            }
+          }
+        }).catch(() => {});
+      };
+      es.onerror = () => {
+        // swallow; EventSource will try to reconnect
+      };
+    } catch (e) {
+      // ignore (EventSource may not be available in some environments)
+    }
+
+    return () => { mounted = false; if (es) es.close(); };
   }, []);
 
   const handleNavigate = (payload: { subject?: string; question_type?: string; tag?: string; autoRun?: boolean }) => {
